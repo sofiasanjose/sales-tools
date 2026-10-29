@@ -590,6 +590,42 @@ def write(rel, data):
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Catalogue builder data: the same products, in the shape the builder reads.
+# ---------------------------------------------------------------------------
+BUILDER_CATS = {"Sauces": ("Food & Grocery", "Sauces"), "Chilis": ("Food & Grocery", "Chilis"),
+                "Beans": ("Food & Grocery", "Beans"), "Tortillas": ("Food & Grocery", "Tortillas"),
+                "Pantry": ("Food & Grocery", "Seasonings & Spices"), "Snacks": ("Snacks", "Chips"),
+                "Sweets": ("Sweets", "Candy"), "Drinks": ("Drinks", "Soda")}
+
+
+def builder_catalog():
+    out = []
+    for p in products:
+        top, sub = BUILDER_CATS[p["category"]]
+        if p["category"] == "Drinks" and "LUNA" in p["brand"]:
+            sub = "Beer"
+        if p["category"] == "Drinks" and "CONCENTRADO" in p["variant"]:
+            sub = "Drink Mixers"
+        m = re.match(r"CS/(\d+)", p["uom"])
+        title = re.sub(r"^\[[^\]]*\]\s*", "", p["name"])
+        out.append({
+            "id": p["id"], "title": title, "handle": re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-"),
+            "url": "", "sku": p["sku"], "available": free(p["id"]) > 0, "grams": 0,
+            "image": f"demo-data/img/{p['sku']}.svg", "images": [f"demo-data/img/{p['sku']}.svg"], "description": "",
+            "units_per_case": int(m.group(1)) if m else None,
+            "units_per_display": rng.choice([12, 20, 24]) if p["uom"] == "DISPLAYS" else None,
+            "cases_per_pallet": rng.choice([60, 80, 100, 120]), "ean_unit": "", "ean_case": "", "case_weight": "",
+            "vendor": "Demo Foods", "type": "", "tags": [],
+            "countries": ["American"] if p["code"] == "XPROD" else ["Mexican"],
+            "categories": [top], "subcategories": [sub], "brands": [p["brand"].title()],
+        })
+    return {"generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "shop": "",
+            "product_count": len(out), "photo_root": "", "photos": {}, "photos_published": {}, "sku_of": {},
+            "title_rules": [], "title_prefix": {l[0]: list(BUILDER_CATS[l[1]]) for l in LINES},
+            "products": out}
+
+
 def main():
     if OUT.exists():
         shutil.rmtree(OUT)
@@ -606,6 +642,8 @@ def main():
         "incoming": round(sum(a["qty"] for a in stock[p["id"]]["arrivals"]), 2), "arrivals": stock[p["id"]]["arrivals"],
         "next_eta": stock[p["id"]]["arrivals"][0]["date"] if stock[p["id"]]["arrivals"] else None,
         "base_uom": p["uom"], "pack": None} for p in products]})
+    (OUT / "catalog-builder.js").write_text("window.CATALOG_DATA=" + json.dumps(builder_catalog(), ensure_ascii=False,
+                                                                                  separators=(",", ":")) + ";", encoding="utf-8")
     for pl in PRICELISTS:
         write(f"stock/{pl['id']}.json", stock_check(pl["id"]))
         write(f"reco/pl-{pl['id']}.json", reco_pricelist(pl["id"]))

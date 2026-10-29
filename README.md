@@ -1,8 +1,8 @@
 # Sales Tools
 
 Internal web tools for a B2B food distributor's sales team: **live stock per price
-list**, a **one-page brief on any customer**, **product recommendations**, and
-**restock alerts**, in one fast, no-install web app.
+list**, a **one-page brief on any customer**, **product recommendations**, a
+**PDF catalogue builder** and **restock alerts**, in one fast, no-install web app.
 
 **[▶ Open the live demo](https://sofiasanjose.github.io/sales-tools/)**: it runs on
 generated test data, so click around freely.
@@ -13,7 +13,8 @@ generated test data, so click around freely.
 > Mexican and American food, for its sales team. **This public
 > version contains no company code or data:** every shop, product, order and stock
 > figure is made up by [`tools/build_demo_data.py`](tools/build_demo_data.py), and
-> the ERP connection is replaced by a small adapter that serves that data.
+> the ERP connection is replaced by a small adapter that serves that data. The
+> made-up company in the catalogues is "Demo Foods".
 
 ---
 
@@ -49,6 +50,16 @@ they already buy, another size of it, or a sample. On top, the **best additions*
 shops with orders like theirs. Also works for a whole price list.
 
 ![Recommendations](docs/screenshots/recommendations.png)
+
+### Catalog builder
+Filter the whole range by country, category, brand or XPROD, tick what a customer
+wants (or import their price-list spreadsheet), rearrange and rename products and
+sections, then print a branded A4 catalogue to PDF, with pack sizes, SKUs and
+optional prices. Drafts and recent catalogues are kept in the browser.
+
+![Catalog builder](docs/screenshots/catalog-builder.png)
+
+![Catalogue PDF preview](docs/screenshots/catalog-pdf.png)
 
 ### Restock requests
 Salespeople note the SKUs a customer is waiting for; the app re-checks stock
