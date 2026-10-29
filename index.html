@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Sales Tools · demo</title>
+<script src="assets/demo-api.js"></script>
+<style>
+  :root {
+    --brand: #125bb2;
+    --navy: #205ba6;
+    --navy-light: #2f72c9;
+    --navy-dk: #17457d;
+    --blue-lt: #e2efff;
+    --red: #d82332;
+    --cream: #fdfce8;
+    --bg: #f7f8fa;
+    --soft: #f2f4f7;
+    --ink: #1d1d1d;
+    --muted: #6b7280;
+    --card: #ffffff;
+    --line: #e3e6ea;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+    --shadow-lg: 0 12px 32px rgba(16,24,40,.12), 0 4px 10px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c;
+      --soft: #1b1f2b;
+      --ink: #e7e9ee;
+      --muted: #9aa3b2;
+      --card: #181c26;
+      --line: #2c3345;
+      --blue-lt: #1c2a3f;
+      --navy-dk: #9cc2f2;
+      --shadow: 0 1px 2px rgba(0,0,0,.24), 0 1px 3px rgba(0,0,0,.2);
+      --shadow-lg: 0 12px 32px rgba(0,0,0,.4), 0 4px 10px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---- top bar ---- */
+  .appbar {
+    flex: none; height: 54px; padding: 0 14px 0 8px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border-bottom: 1px solid var(--line);
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    color: var(--ink); position: relative; z-index: 30;
+  }
+  .menu-btn {
+    width: 38px; height: 38px; border: 0; border-radius: 9px; background: transparent;
+    color: var(--ink); display: flex; align-items: center; justify-content: center;
+  }
+  .menu-btn:hover { background: var(--soft); }
+  .brand { display: flex; align-items: center; gap: 12px; border: 0; background: none; color: inherit; padding: 0; }
+  .brand .mark {
+    width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--brand), #2f72c9); color: #fff;
+  }
+  .brand .wordmark { font-weight: 750; font-size: 15.5px; letter-spacing: -.01em; }
+  .demo-tag {
+    font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #9a5b00;
+    background: #fff4e0; border: 1px solid #f3d9a8; border-radius: 20px; padding: 3px 9px; white-space: nowrap;
+  }
+  .crumb { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .crumb::before { content: ""; width: 1px; height: 22px; background: var(--line); }
+  .spacer { flex: 1; }
+  .help-btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--navy); border-radius: 18px;
+    padding: 6px 13px; font-size: 12.5px; font-weight: 650; white-space: nowrap;
+  }
+  .help-btn:hover { background: var(--blue-lt); }
+  .me { position: relative; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--card);
+    background: var(--brand); color: #fff; font-size: 12.5px; font-weight: 700; letter-spacing: .02em;
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .avatar:hover { box-shadow: 0 0 0 2px var(--blue-lt); }
+  .me-menu {
+    position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; z-index: 60;
+    background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: var(--shadow-lg); padding: 14px 14px 10px;
+  }
+  .me-name { font-weight: 650; font-size: 14px; }
+  .me-mail { font-size: 12px; color: var(--muted); margin-top: 1px; word-break: break-all; }
+  .me-menu a {
+    display: block; margin-top: 12px; padding: 8px 10px; border-radius: 8px; text-align: center;
+    background: var(--soft); color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 600;
+  }
+  .me-menu a:hover { background: var(--blue-lt); color: var(--navy-dk); }
+
+  /* The Catalogue builder has its own header (with a ☰ that opens this
+     menu), so the bar steps aside while it's open. */
+  body.bare .appbar { display: none; }
+
+  /* ---- back-in-stock alerts: bell in the bar, card floating top-right ---- */
+  .bell {
+    position: relative; width: 38px; height: 38px; border: 0; border-radius: 9px; background: transparent;
+    color: var(--ink); display: flex; align-items: center; justify-content: center;
+  }
+  .bell:hover { background: var(--soft); }
+  .badge.dot {
+    position: absolute; top: 3px; right: 1px; height: 18px; min-width: 18px; padding: 0 5px;
+    border-radius: 9px; font-size: 10.5px; border: 2px solid var(--card); margin: 0;
+  }
+  .toast {
+    position: fixed; top: 66px; right: 16px; z-index: 35; width: min(380px, calc(100vw - 32px));
+    display: flex; align-items: center; gap: 12px; padding: 12px 10px 12px 14px;
+    background: var(--card); border: 1px solid rgba(19,122,75,.35); border-left: 4px solid #137a4b;
+    border-radius: 12px; box-shadow: var(--shadow-lg); animation: toast-in .25s ease;
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  .toast .ic {
+    width: 36px; height: 36px; border-radius: 10px; flex: none; display: flex; align-items: center; justify-content: center;
+    background: rgba(19,122,75,.10); color: #137a4b;
+  }
+  .toast .grow { flex: 1; min-width: 0; }
+  .toast b { display: block; font-size: 13.5px; color: #137a4b; }
+  .toast small {
+    display: block; font-size: 12px; color: var(--muted); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toast-view {
+    border: 0; border-radius: 8px; padding: 7px 12px; background: #137a4b; color: #fff; font-weight: 650; font-size: 12.5px;
+  }
+  .toast-view:hover { background: #0f6640; }
+  .toast-x {
+    width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1;
+  }
+  .toast-x:hover { background: var(--soft); color: var(--ink); }
+
+  /* ---- slide-out menu ---- */
+  .scrim {
+    position: fixed; inset: 0; background: rgba(15,23,42,.32); z-index: 40;
+    opacity: 0; pointer-events: none; transition: opacity .18s;
+  }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; bottom: 0; left: 0; width: min(310px, 86vw); z-index: 50;
+    background: var(--card); box-shadow: var(--shadow-lg);
+    display: flex; flex-direction: column;
+    transform: translateX(-102%); transition: transform .2s ease;
+  }
+  .drawer.open { transform: none; }
+  .drawer-head {
+    /* The patterned banner, so the menu doesn't repeat the landing page's. */
+    height: 120px; flex: none; position: relative;
+    background: radial-gradient(circle at 85% 30%, rgba(255,255,255,.18) 0 46px, transparent 47px),
+      radial-gradient(circle at 70% 120%, rgba(255,255,255,.12) 0 70px, transparent 71px),
+      linear-gradient(135deg, var(--brand), #2f72c9);
+  }
+  .drawer-head .x {
+    position: absolute; top: 10px; left: 10px; width: 32px; height: 32px; border: 0; border-radius: 50%;
+    background: #fff; color: var(--brand); font-size: 20px; line-height: 1;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  }
+  .drawer-head .x:hover { background: var(--blue-lt); }
+  .drawer h2 {
+    margin: 16px 20px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+  }
+  .drawer nav { padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--ink);
+  }
+  .nav-item:hover { background: var(--soft); }
+  .nav-item.on { background: var(--blue-lt); color: var(--navy-dk); }
+  .nav-item .ic {
+    width: 34px; height: 34px; border-radius: 8px; flex: none; display: flex; align-items: center; justify-content: center;
+    background: var(--soft); color: var(--navy);
+  }
+  .nav-item.on .ic { background: var(--card); }
+  .nav-item b { display: block; font-size: 13.5px; font-weight: 650; }
+  .nav-item small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+  /* ---- views ---- */
+  .views { flex: 1; position: relative; min-height: 0; }
+  .views iframe, .views .notice, .views .home {
+    position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg);
+  }
+
+  .home { overflow-y: auto; }
+  .hero {
+    position: relative; overflow: hidden; background: #fff; border-bottom: 1px solid var(--line);
+    height: 150px; width: 100%; border-bottom: 0;
+    background: radial-gradient(circle at 88% 20%, rgba(255,255,255,.16) 0 90px, transparent 91px),
+      radial-gradient(circle at 10% 140%, rgba(255,255,255,.12) 0 120px, transparent 121px),
+      linear-gradient(120deg, #0f4c99, #125bb2 45%, #2f72c9);
+  }
+  .hero img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: center; display: block;
+  }
+  .home-intro { max-width: 980px; margin: 0 auto; padding: 34px 24px 4px; text-align: center; }
+  .home-intro .hello { font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  .home-intro h1 { margin: 4px 0 6px; font-size: 28px; letter-spacing: -.02em; line-height: 1.15; }
+  .home-intro h1 .name { color: var(--brand); }
+  .home-intro p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  /* Jump straight to a customer or a price list from the home page. */
+  .jump { position: relative; max-width: 560px; margin: 20px auto 0; text-align: left; }
+  .jump input {
+    width: 100%; padding: 13px 16px 13px 42px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    font-size: 15px; outline: none; box-shadow: var(--shadow);
+  }
+  .jump input:focus { border-color: var(--navy); box-shadow: 0 0 0 4px rgba(32,91,166,.14); }
+  .jump svg.glass { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+  .jump-results {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 30; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg); max-height: 380px; overflow-y: auto; padding: 6px;
+  }
+  .jump-results .grp { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; padding: 8px 10px 4px; }
+  .jump-results button {
+    display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; text-align: left;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--ink);
+  }
+  .jump-results button:hover, .jump-results button.sel { background: var(--blue-lt); }
+  .jump-results .k {
+    width: 28px; height: 28px; border-radius: 7px; flex: none; display: flex; align-items: center; justify-content: center;
+    background: var(--soft); color: var(--navy);
+  }
+  .jump-results .g { flex: 1; min-width: 0; }
+  .jump-results .g b { display: block; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jump-results .g small { display: block; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jump-results .to { font-size: 11.5px; color: var(--navy); font-weight: 650; white-space: nowrap; }
+  .jump-results .none { padding: 12px; font-size: 13px; color: var(--muted); }
+
+  .tools {
+    max-width: 900px; margin: 26px auto 0; padding: 0 24px 48px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 18px;
+  }
+  .tool {
+    text-align: left; border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+    box-shadow: var(--shadow); padding: 22px 22px 18px; color: var(--ink);
+    display: flex; flex-direction: column; gap: 10px; transition: transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .tool:hover { transform: translateY(-2px); border-color: #b9c9de; box-shadow: var(--shadow-lg); }
+  .tool .ic {
+    width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    background: var(--blue-lt); color: var(--navy);
+  }
+  .tool.red .ic { background: rgba(216,35,50,.10); color: var(--red); }
+  .tool.green .ic { background: rgba(19,122,75,.10); color: #137a4b; }
+  .tool.violet .ic { background: rgba(109,63,192,.10); color: #6d3fc0; }
+  .tool.orange .ic { background: rgba(214,110,20,.12); color: #b35a0c; }
+  /* An odd card out at the end takes the full row. */
+  .tool:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .tool { position: relative; }
+  .badge {
+    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #137a4b; color: #fff;
+    font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+    margin-left: auto; flex: none;
+  }
+  .badge.corner { position: absolute; top: 16px; right: 16px; height: 24px; min-width: 24px; border-radius: 12px; font-size: 12.5px; }
+  .restock-banner {
+    display: flex; align-items: center; gap: 12px; width: calc(100% - 48px); max-width: 852px;
+    margin: 22px auto 0; padding: 12px 16px; border: 1px solid rgba(19,122,75,.35); border-radius: 12px;
+    background: rgba(19,122,75,.08); color: #137a4b; font-weight: 600; font-size: 14px; text-align: left;
+  }
+  .restock-banner:hover { background: rgba(19,122,75,.13); }
+  .restock-banner .grow { flex: 1; }
+  .restock-banner .go { font-size: 13px; }
+  .tool h3 { margin: 4px 0 0; font-size: 17px; letter-spacing: -.01em; }
+  .tool p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .tool .go { margin-top: auto; padding-top: 8px; font-size: 13px; font-weight: 650; color: var(--navy); }
+
+  .notice { display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .notice div {
+    max-width: 460px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 22px 24px; font-size: 14px; line-height: 1.5;
+  }
+  .notice h2 { margin: 0 0 8px; font-size: 16px; }
+  .notice code { font-size: 12.5px; }
+  .notice button {
+    margin-top: 12px; border: 0; border-radius: 8px; padding: 8px 14px;
+    background: var(--navy); color: #fff; font-weight: 600;
+  }
+
+  @media (max-width: 640px) {
+    .help-btn { padding: 6px 10px; }
+    .brand img { height: 22px; }
+    .tools { padding: 0 16px 36px; margin-top: 20px; }
+    .home-intro { padding: 24px 16px 0; }
+    .home-intro h1 { font-size: 23px; }
+  }
+</style>
+</head>
+<body>
+<header class="appbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open the sales tools menu" aria-expanded="false" aria-controls="drawer">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 5h14M3 10h14M3 15h14"/></svg>
+  </button>
+  <button class="brand" data-go="home" aria-label="Home">
+    <span class="mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6z"/><path d="M3 6l7 3.5L17 6M10 9.5v8"/></svg></span>
+    <span class="wordmark">Sales Tools</span>
+  </button>
+  <span class="crumb" id="crumb">Home</span>
+  <span class="spacer"></span>
+  <span class="demo-tag" title="Every customer, product, order and stock figure here is made up">Demo · test data</span>
+  <button class="help-btn" id="help-btn" hidden>How it works</button>
+  <button class="bell" data-go="restock" id="bell" aria-label="Restock requests">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a5 5 0 0 1 10 0c0 4 1.5 5.5 2 6H3c.5-.5 2-2 2-6z"/><path d="M8.5 17a1.6 1.6 0 0 0 3 0"/></svg>
+    <span class="badge dot" data-badge hidden></span>
+  </button>
+  <div class="me" id="me" hidden>
+    <button class="avatar" id="avatar" aria-haspopup="true" aria-expanded="false" aria-controls="me-menu"></button>
+    <div class="me-menu" id="me-menu" hidden>
+      <div class="me-name" id="me-name"></div>
+      <div class="me-mail" id="me-mail"></div>
+    </div>
+  </div>
+</header>
+
+<div class="toast" id="toast" role="status" hidden>
+  <span class="ic"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a5 5 0 0 1 10 0c0 4 1.5 5.5 2 6H3c.5-.5 2-2 2-6z"/><path d="M8.5 17a1.6 1.6 0 0 0 3 0"/></svg></span>
+  <div class="grow">
+    <b id="toast-title"></b>
+    <small id="toast-text"></small>
+  </div>
+  <button class="toast-view" id="toast-view">View</button>
+  <button class="toast-x" id="toast-x" aria-label="Hide until something new comes in">&times;</button>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Sales tools">
+  <div class="drawer-head" role="img" aria-label="Sales tools">
+    <button class="x" id="drawer-close" aria-label="Close menu">&times;</button>
+  </div>
+  <h2>Sales tools</h2>
+  <nav>
+    <button class="nav-item" data-go="home">
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 9.5 10 3.5l7 6V17a1 1 0 0 1-1 1h-3.5v-5h-5v5H4a1 1 0 0 1-1-1z"/></svg></span>
+      <span><b>Home</b><small>All the sales tools</small></span>
+    </button>
+    <button class="nav-item" data-go="stock">
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6z"/><path d="M3 6l7 3.5L17 6M10 9.5v8"/></svg></span>
+      <span><b>Stock check</b><small>Live stock &amp; ETAs per price list</small></span>
+    </button>
+    <button class="nav-item" data-go="customer">
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 9.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M3.5 17.5c.6-3.3 3.3-5.3 6.5-5.3s5.9 2 6.5 5.3"/></svg></span>
+      <span><b>Customer profile</b><small>One customer, before a visit or call</small></span>
+    </button>
+    <button class="nav-item" data-go="reco">
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5l-1.6-4.4L4 8.5l4.4-1.6z"/><path d="M15.5 13l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg></span>
+      <span><b>Recommendations</b><small>What to offer a customer next</small></span>
+    </button>
+    <button class="nav-item" data-go="restock">
+      <span class="ic"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a5 5 0 0 1 10 0c0 4 1.5 5.5 2 6H3c.5-.5 2-2 2-6z"/><path d="M8.5 17a1.6 1.6 0 0 0 3 0"/></svg></span>
+      <span><b>Restock requests</b><small>Get told when stock comes in</small></span>
+      <span class="badge" data-badge hidden></span>
+    </button>
+  </nav>
+</aside>
+
+<div class="views">
+  <section class="home" id="view-home">
+    <div class="hero" aria-hidden="true"></div>
+    <div class="home-intro">
+      <div class="hello hello-text">Hello</div>
+      <h1 class="welcome">Welcome</h1>
+      <p>Stock, customer profiles, recommendations and restock alerts in one place, for a B2B food distributor's sales team.</p>
+      <div class="jump" id="jump">
+        <svg class="glass" width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="6"/><path d="M13 13l5 5"/></svg>
+        <input id="jump-q" type="search" placeholder="Find a customer or a price list…" autocomplete="off" aria-label="Find a customer or a price list">
+        <div class="jump-results" id="jump-results" hidden></div>
+      </div>
+    </div>
+    <button class="restock-banner" data-go="restock" id="restock-banner" hidden>
+      <span class="ic"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a5 5 0 0 1 10 0c0 4 1.5 5.5 2 6H3c.5-.5 2-2 2-6z"/><path d="M8.5 17a1.6 1.6 0 0 0 3 0"/></svg></span>
+      <span class="grow" id="restock-banner-text"></span>
+      <span class="go">View →</span>
+    </button>
+    <div class="tools">
+      <button class="tool" data-go="stock">
+        <span class="ic"><svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6z"/><path d="M3 6l7 3.5L17 6M10 9.5v8"/></svg></span>
+        <h3>Stock check</h3>
+        <p>Pick a price list and see every product on it: free to use, on hand and incoming, in cases or displays.</p>
+        <span class="go">Open stock check →</span>
+      </button>
+      <button class="tool orange" data-go="customer">
+        <span class="ic"><svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 9.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M3.5 17.5c.6-3.3 3.3-5.3 6.5-5.3s5.9 2 6.5 5.3"/></svg></span>
+        <h3>Customer profile</h3>
+        <p>Search any customer for a one-page brief: this year vs last, what they buy and how often, what's due or dropped, and what similar shops buy that they don't.</p>
+        <span class="go">Open customer profile →</span>
+      </button>
+      <button class="tool violet" data-go="reco">
+        <span class="ic"><svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5l-1.6-4.4L4 8.5l4.4-1.6z"/><path d="M15.5 13l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg></span>
+        <h3>Recommendations</h3>
+        <p>Search a customer: next to everything they buy, what its other buyers also buy and similar products, all new to them.</p>
+        <span class="go">Open recommendations →</span>
+      </button>
+      <button class="tool green" data-go="restock">
+        <span class="ic"><svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a5 5 0 0 1 10 0c0 4 1.5 5.5 2 6H3c.5-.5 2-2 2-6z"/><path d="M8.5 17a1.6 1.6 0 0 0 3 0"/></svg></span>
+        <span class="badge corner" data-badge hidden></span>
+        <h3>Restock requests</h3>
+        <p>Note the SKUs your customers are waiting for, and get told here as soon as stock comes in.</p>
+        <span class="go">Open restock requests →</span>
+      </button>
+    </div>
+  </section>
+  <iframe id="view-stock" title="Stock check" hidden></iframe>
+  <iframe id="view-catalog" title="Catalog builder" hidden></iframe>
+  <iframe id="view-restock" title="Restock requests" hidden></iframe>
+  <iframe id="view-reco" title="Recommendations" hidden></iframe>
+  <iframe id="view-customer" title="Customer profile" hidden></iframe>
+  <div class="notice" id="catalog-down" hidden>
+    <div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/restock-core.js"></script>
+<script>
+  // The same page runs on the website and from the reports app on a Mac
+  // (port 5055). On a Mac the builder keeps its own server on 8731 -- its
+  // saved catalogues live in the browser under that address -- and the app
+  // reports whether that server is up.
+  var LOCAL = location.port === "5055";
+  var VIEWS = {
+    home: { title: "Home" },
+    stock: { title: "Stock check", frame: "view-stock" },
+    restock: { title: "Restock requests", frame: "view-restock" },
+    reco: { title: "Recommendations", frame: "view-reco" },
+    customer: { title: "Customer profile", frame: "view-customer" }
+  };
+  var home = document.getElementById("view-home");
+  var stock = document.getElementById("view-stock");
+  var catalog = document.getElementById("view-catalog");
+  var restock = document.getElementById("view-restock");
+  var reco = document.getElementById("view-reco");
+  var customer = document.getElementById("view-customer");
+  var down = document.getElementById("catalog-down");
+  var helpBtn = document.getElementById("help-btn");
+  var drawer = document.getElementById("drawer");
+  var scrim = document.getElementById("scrim");
+  var menuBtn = document.getElementById("menu-btn");
+  var catalogState = "idle"; // idle | loaded | down
+
+  (function greet() {
+    var h = new Date().getHours();
+    var text = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    document.querySelectorAll(".hello-text").forEach(function (el) { el.textContent = text; });
+  })();
+
+  // Who is signed in (website only): the Microsoft account behind
+  // the sign-in, from Azure's /.auth/me. Their name comes from the account's
+  // "name" claim, else from the email (jane.doe@... -> Jane Doe).
+  function titleCase(w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); }
+
+  function personFrom(principal) {
+    var claims = principal.claims || [];
+    var claim = function (types) {
+      for (var i = 0; i < claims.length; i++) {
+        if (types.indexOf(claims[i].typ) !== -1 && claims[i].val) return claims[i].val;
+      }
+      return "";
+    };
+    var email = principal.userDetails || claim(["preferred_username", "email"]);
+    var name = claim(["name", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"]);
+    if (!name || name.indexOf("@") !== -1) {
+      name = (email.split("@")[0] || "").split(/[._-]+/).filter(Boolean).map(titleCase).join(" ");
+    }
+    return { name: name, email: email };
+  }
+
+  function showPerson(person) {
+    if (!person.name) return;
+    var first = person.name.split(/\s+/)[0];
+    document.querySelectorAll(".welcome").forEach(function (el) {
+      el.textContent = "Welcome, ";
+      var n = document.createElement("span");
+      n.className = "name";
+      n.textContent = first;
+      el.appendChild(n);
+    });
+    var parts = person.name.split(/\s+/);
+    var initials = (parts[0].charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : "")).toUpperCase();
+    var avatar = document.getElementById("avatar");
+    avatar.textContent = initials;
+    avatar.title = person.name;
+    avatar.setAttribute("aria-label", "Account: " + person.name);
+    document.getElementById("me-name").textContent = person.name;
+    document.getElementById("me-mail").textContent = person.email;
+    document.getElementById("me").hidden = false;
+  }
+
+  if (!LOCAL) {
+    fetch("/.auth/me").then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.clientPrincipal) showPerson(personFrom(d.clientPrincipal));
+    }).catch(function () {});
+  }
+
+  var meMenu = document.getElementById("me-menu");
+  var avatarBtn = document.getElementById("avatar");
+  avatarBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    meMenu.hidden = !meMenu.hidden;
+    avatarBtn.setAttribute("aria-expanded", meMenu.hidden ? "false" : "true");
+  });
+  document.addEventListener("click", function (e) {
+    if (!meMenu.hidden && !meMenu.contains(e.target)) { meMenu.hidden = true; avatarBtn.setAttribute("aria-expanded", "false"); }
+  });
+
+  function setDrawer(open) {
+    drawer.classList.toggle("open", open);
+    scrim.classList.toggle("open", open);
+    menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) drawer.querySelector(".nav-item.on, .nav-item").focus();
+  }
+
+  function current() {
+    var v = location.hash.replace("#", "");
+    return VIEWS[v] ? v : "home";
+  }
+
+  function paint() {
+    var view = current();
+    home.hidden = view !== "home";
+    stock.hidden = view !== "stock";
+    restock.hidden = view !== "restock";
+    reco.hidden = view !== "reco";
+    customer.hidden = view !== "customer";
+    catalog.hidden = view !== "catalog" || catalogState !== "loaded";
+    document.body.classList.toggle("bare", !catalog.hidden);
+    down.hidden = view !== "catalog" || catalogState !== "down";
+  }
+
+  function show(view) {
+    if (view === "stock" && !stock.getAttribute("src")) stock.src = "stock-check.html";
+    if (view === "restock" && !restock.getAttribute("src")) restock.src = "restock.html";
+    if (view === "reco" && !reco.getAttribute("src")) reco.src = "reco.html";
+    if (view === "customer" && !customer.getAttribute("src")) customer.src = "customer.html";
+    document.querySelectorAll(".nav-item").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.go === view);
+    });
+    document.getElementById("crumb").textContent = VIEWS[view].title;
+    // The tool's own instructions; the Catalogue builder has its own button.
+    helpBtn.hidden = !VIEWS[view].frame;
+    document.title = (view === "home" ? "Sales Tools · demo" : VIEWS[view].title + " · Sales Tools");
+    paint();
+    if (window.SalesRestock) showToast(window.SalesRestock.alerts());
+  }
+
+  function go(view) {
+    history.replaceState(null, "", view === "home" ? location.pathname : "#" + view);
+    show(view);
+    setDrawer(false);
+  }
+
+  document.querySelectorAll("[data-go]").forEach(function (b) {
+    b.addEventListener("click", function () { go(b.dataset.go); });
+  });
+  menuBtn.addEventListener("click", function () { setDrawer(!drawer.classList.contains("open")); });
+  scrim.addEventListener("click", function () { setDrawer(false); });
+  document.getElementById("drawer-close").addEventListener("click", function () { setDrawer(false); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && drawer.classList.contains("open")) { setDrawer(false); menuBtn.focus(); }
+  });
+  helpBtn.addEventListener("click", function () {
+    var frame = VIEWS[current()].frame && document.getElementById(VIEWS[current()].frame);
+    if (frame && frame.contentWindow) frame.contentWindow.postMessage({ app: "toggle-help" }, "*");
+  });
+  // The builder's own ☰ asks for the menu.
+  var PAGES = { stock: "stock-check.html", customer: "customer.html", reco: "reco.html", restock: "restock.html" };
+  // Opens a tool on something in particular: a customer's profile, a price
+  // list's stock ("#pl=17&client=884").
+  function openView(view, hash) {
+    if (!PAGES[view]) return;
+    go(view);
+    var frame = document.getElementById(VIEWS[view].frame);
+    frame.src = PAGES[view] + (hash ? "#" + hash : "");
+  }
+  // ---- home: find a customer (opens their profile) or a price list (its stock) ----
+  (function jump() {
+    var q = document.getElementById("jump-q"), box = document.getElementById("jump-results");
+    var ICON_P = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 9.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M3.5 17.5c.6-3.3 3.3-5.3 6.5-5.3s5.9 2 6.5 5.3"/></svg>';
+    var ICON_L = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 5.5h9M7 10h9M7 14.5h9M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01"/></svg>';
+    var lists = [], customers = [], asked = "", timer = null, sel = -1;
+    function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+    function loadLists() {
+      try { lists = JSON.parse(localStorage.getItem("st-stock-pricelists")) || []; } catch (e) {}
+      fetch("/api/pricelists").then(function (r) { return r.json(); }).then(function (d) {
+        if (d.results) { lists = d.results; try { localStorage.setItem("st-stock-pricelists", JSON.stringify(lists)); } catch (e) {} }
+      }).catch(function () {});
+    }
+    function items() { return Array.prototype.slice.call(box.querySelectorAll("button")); }
+    function draw() {
+      var t = q.value.trim().toLowerCase();
+      if (!t) { box.hidden = true; return; }
+      var pl = lists.filter(function (p) { return p.name.toLowerCase().indexOf(t) > -1; }).slice(0, 5);
+      var cs = asked.toLowerCase() === t ? customers.slice(0, 6) : [];
+      var html = "";
+      if (cs.length) html += '<div class="grp">Customers</div>' + cs.map(function (c, i) {
+        return '<button type="button" data-c="' + i + '"><span class="k">' + ICON_P + '</span><span class="g"><b>' + esc(c.name) + "</b><small>" +
+          esc([c.place, c.pricelist && c.pricelist.name].filter(Boolean).join(" · ")) + '</small></span><span class="to">Profile →</span></button>';
+      }).join("");
+      if (pl.length) html += '<div class="grp">Price lists</div>' + pl.map(function (p) {
+        return '<button type="button" data-p="' + p.id + '"><span class="k">' + ICON_L + '</span><span class="g"><b>' + esc(p.name) + "</b><small>" +
+          esc(p.tag) + '</small></span><span class="to">Stock →</span></button>';
+      }).join("");
+      if (!html) html = '<div class="none">' + (t.length >= 2 && asked.toLowerCase() !== t ? "Searching customers…" : "Nothing matches.") + "</div>";
+      box.innerHTML = html;
+      box.hidden = false;
+      sel = -1;
+      items().forEach(function (b) {
+        b.addEventListener("click", function () {
+          if (b.dataset.c != null) openView("customer", String(customers[+b.dataset.c].id));
+          else openView("stock", "pl=" + b.dataset.p);
+          q.value = ""; box.hidden = true;
+        });
+      });
+    }
+    q.addEventListener("focus", function () { if (!lists.length) loadLists(); draw(); });
+    q.addEventListener("input", function () {
+      var t = q.value.trim();
+      clearTimeout(timer);
+      draw();
+      if (t.length < 2) return;
+      timer = setTimeout(function () {
+        fetch("/api/customers?q=" + encodeURIComponent(t)).then(function (r) { return r.json(); }).then(function (d) {
+          if (q.value.trim() !== t || d.error) return;
+          customers = d.results || [];
+          asked = t;
+          draw();
+        }).catch(function () {});
+      }, 250);
+    });
+    q.addEventListener("keydown", function (e) {
+      var list = items();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        sel = Math.max(0, Math.min(list.length - 1, sel + (e.key === "ArrowDown" ? 1 : -1)));
+        list.forEach(function (b, i) { b.classList.toggle("sel", i === sel); });
+        if (list[sel]) list[sel].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter") {
+        if (list[sel < 0 ? 0 : sel]) list[sel < 0 ? 0 : sel].click();
+      } else if (e.key === "Escape") { box.hidden = true; q.blur(); }
+    });
+    document.addEventListener("click", function (e) { if (!document.getElementById("jump").contains(e.target)) box.hidden = true; });
+  })();
+
+  window.addEventListener("message", function (e) {
+    if (!e.data) return;
+    var fromTool = ["view-stock", "view-customer", "view-reco", "view-restock"].some(function (id) {
+      return e.source === document.getElementById(id).contentWindow;
+    });
+    if (fromTool && e.data.app === "open-view") openView(e.data.view, e.data.hash);
+    if (e.source !== catalog.contentWindow) return;
+    if (e.data.app === "open-menu") setDrawer(true);
+    if (e.data.app === "open-restock") go("restock");
+    if (e.data.app === "go-home") go("home");
+  });
+  // Typing #stock / #catalog in the address bar switches tools too.
+  window.addEventListener("hashchange", function () { show(current()); });
+
+  // ---- restock alerts: badge, banner and pop-ups, whichever tool is open ----
+  var RESTOCK_CHECK_MS = 10 * 60 * 1000;
+
+  // The card shows until it's closed, and comes back when the set of
+  // back-in-stock requests changes (something new arrives).
+  var TOAST_KEY = "st-restock-toast-hidden";
+
+  function alertSignature(list) {
+    return list.map(function (r) { return r.id; }).sort().join(",");
+  }
+
+  function describe(r) {
+    return (r.name || r.sku) + (r.customer ? " for " + r.customer : "");
+  }
+
+  function showToast(waiting) {
+    var toast = document.getElementById("toast");
+    var hiddenFor = "";
+    try { hiddenFor = sessionStorage.getItem(TOAST_KEY) || ""; } catch (e) {}
+    var n = waiting.length;
+    toast.hidden = !n || current() === "restock" || hiddenFor === alertSignature(waiting);
+    if (!n) return;
+    document.getElementById("toast-title").textContent = n === 1 ? "Back in stock" : n + " requests back in stock";
+    document.getElementById("toast-text").textContent = n === 1
+      ? describe(waiting[0])
+      : waiting.slice(0, 3).map(function (r) { return r.name || r.sku; }).join(", ") + (n > 3 ? "…" : "");
+  }
+
+  // The Catalogue builder draws its own header, so it gets the count too
+  // and shows the same bell there.
+  function tellCatalog(n) {
+    if (catalog.contentWindow) catalog.contentWindow.postMessage({ app: "restock-count", count: n }, "*");
+  }
+
+  function showRestockAlerts() {
+    var waiting = window.SalesRestock.alerts();
+    var n = waiting.length;
+    showToast(waiting);
+    tellCatalog(n);
+    document.querySelectorAll("[data-badge]").forEach(function (b) {
+      b.hidden = !n;
+      b.textContent = n;
+      b.title = n + " back in stock";
+    });
+    var banner = document.getElementById("restock-banner");
+    banner.hidden = !n;
+    document.getElementById("restock-banner-text").textContent = n === 1
+      ? "Good news: " + (waiting[0].name || waiting[0].sku) + (waiting[0].customer ? " for " + waiting[0].customer : "") + " is back in stock."
+      : "Good news: " + n + " of your restock requests are back in stock.";
+  }
+
+  function checkRestock() {
+    window.SalesRestock.refresh().then(function (res) {
+      window.SalesRestock.popUp(res.arrived);
+      showRestockAlerts();
+    }).catch(function () {});
+  }
+
+  window.SalesRestock.init().then(function () {
+    showRestockAlerts();
+    // The restock page checks when it's open; otherwise check here, at most
+    // every few minutes so opening the landing page stays quick.
+    var last = window.SalesRestock.lastChecked();
+    if (!last || Date.now() - new Date(last) > 5 * 60 * 1000) checkRestock();
+    setInterval(function () { if (current() !== "restock") checkRestock(); }, RESTOCK_CHECK_MS);
+  });
+  document.getElementById("toast-view").addEventListener("click", function () { go("restock"); });
+  document.getElementById("toast-x").addEventListener("click", function () {
+    try { sessionStorage.setItem(TOAST_KEY, alertSignature(window.SalesRestock.alerts())); } catch (e) {}
+    document.getElementById("toast").hidden = true;
+  });
+  catalog.addEventListener("load", function () { tellCatalog(window.SalesRestock.alerts().length); });
+  // The restock page saves its list in the same browser storage.
+  window.addEventListener("storage", function (e) {
+    if (e.key && e.key.indexOf("st-restock-requests") === 0) showRestockAlerts();
+  });
+
+  show(current());
+</script>
+</body>
+</html>

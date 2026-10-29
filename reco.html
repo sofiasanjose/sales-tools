@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Recommendations · Sales Tools</title>
+<script src="assets/demo-api.js"></script>
+<link rel="stylesheet" href="assets/sales.css">
+<style>
+  /* ---- results ---- */
+  /* One row that scrolls sideways, so the per-SKU list stays near the top. */
+  .adds { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; margin-bottom: 18px; scroll-snap-type: x proximity; }
+  .adds .add-card { flex: 0 0 176px; scroll-snap-align: start; }
+  .add-card {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 10px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .add-card .t { font-size: 12.5px; font-weight: 600; line-height: 1.3; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .add-card .s { font-size: 11px; color: var(--muted); }
+  .add-card .why { font-size: 11.5px; color: var(--violet); font-weight: 600; }
+  .add-card .foot { display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+  .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters .search { flex: 1; min-width: 220px; }
+  .pane { display: flex; flex-direction: column; gap: 6px; }
+  .add-card .thumb { width: 100%; height: 76px; }
+  .sku .me .thumb { width: 56px; height: 56px; }
+  .reco .thumb { width: 40px; height: 40px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .dot.together { background: var(--violet); }
+  .dot.similar { background: var(--navy); }
+
+  .sku {
+    display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 16px; align-items: center;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 10px 12px 10px 10px; margin-bottom: 8px;
+  }
+  .sku .me { display: flex; gap: 10px; align-items: center; min-width: 0; }
+  .sku .me .t { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .sku .me .s { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .sku .me .s b { color: var(--ink); font-weight: 600; }
+  .recs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .reco {
+    display: flex; gap: 8px; align-items: center; padding: 6px 8px 6px 6px; border-radius: 8px; min-width: 0;
+    background: var(--soft); border-left: 3px solid var(--violet);
+  }
+  .reco.similar { border-left-color: var(--navy); }
+  .reco .t { font-size: 11.5px; font-weight: 600; line-height: 1.25; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .reco .why { font-size: 10.5px; color: var(--violet); font-weight: 600; margin-top: 2px; }
+  .reco.similar .why { color: var(--navy); }
+  .reco .why span { color: var(--muted); font-weight: 500; }
+  .no-recos { font-size: 12px; color: var(--muted); }
+  .more { text-align: center; color: var(--muted); font-size: 12.5px; padding: 10px 0 24px; min-height: 1px; }
+  @media (max-width: 1100px) {
+    .sku { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 1400px) {
+    .recs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 700px) {
+    .recs { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="tool">
+<aside class="side">
+  <div class="side-head"><h3>Customers &amp; price lists</h3><span class="n" id="pl-count"></span></div>
+  <div class="search"><input class="txt" id="pl-filter" placeholder="Search customers or price lists…" autocomplete="off"></div>
+  <div class="side-list" id="pl-list"><div class="side-note">Loading price lists…</div></div>
+</aside>
+
+<main class="main">
+  <div class="empty-state" id="intro">
+    <div class="ic"><svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5l1.6 4.4 4.4 1.6-4.4 1.6L10 14.5l-1.6-4.4L4 8.5l4.4-1.6z"/><path d="M15.5 13l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg></div>
+    <h2>Search for a customer</h2>
+    <p>Next to every product they buy: what other buyers of it also buy, and similar products, never something they already buy. On top, what shops with orders like theirs buy and they don't. You can also pick a whole price list.</p>
+  </div>
+
+  <div id="view" hidden>
+    <div class="page-head">
+      <div class="top"><div><h1 id="pl-name"></h1><div class="meta" id="pl-meta"></div></div>
+        <div class="actions"><button type="button" class="btn" id="to-profile" hidden>Customer profile →</button>
+          <button type="button" class="btn" id="to-stock">Check stock →</button></div></div>
+    </div>
+    <section class="pane">
+      <div id="status"></div>
+      <div id="adds-wrap" hidden>
+        <div class="section-title"><span id="adds-title">Best additions to this price list</span>
+          <span class="hint" id="adds-hint">· most bought by customers whose orders look like this price list</span></div>
+        <div class="adds" id="adds"></div>
+      </div>
+      <div id="list-wrap" hidden>
+        <div class="section-title" id="list-title">Suggestions per SKU</div>
+        <div class="filters">
+          <div class="search"><input class="txt" id="q" placeholder="Search a SKU or product on this price list…" autocomplete="off"></div>
+          <div class="seg" id="mode" role="group" aria-label="Which suggestions">
+            <button type="button" data-mode="both" class="on">Both</button>
+            <button type="button" data-mode="together"><i class="dot together"></i>Bought together</button>
+            <button type="button" data-mode="similar"><i class="dot similar"></i>Similar</button>
+          </div>
+        </div>
+        <div id="list"></div>
+      </div>
+    </section>
+  </div>
+</main>
+</div>
+
+<script src="assets/sales.js"></script>
+<script>
+  var data = null;
+  var current = null;
+  var pricelists = [];
+  var PL_CACHE_KEY = "st-stock-pricelists";   // shared with Stock check
+  var BATCH = 60;
+  var MODE_KEY = "st-reco-mode";
+  var mode = "both";
+  try { mode = localStorage.getItem(MODE_KEY) || "both"; } catch (e) {}
+
+  // Both: two of each, the other kind filling in when one runs short.
+  function suggestionsFor(p) {
+    if (mode === "together") return p.together.slice(0, 4);
+    if (mode === "similar") return p.similar.slice(0, 4);
+    var picked = p.together.slice(0, 2).concat(p.similar.slice(0, 2));
+    var spare = p.together.slice(2).concat(p.similar.slice(2));
+    return picked.concat(spare.slice(0, 4 - picked.length));
+  }
+
+  function syncMode() {
+    document.querySelectorAll("#mode button").forEach(function (b) { b.classList.toggle("on", b.dataset.mode === mode); });
+  }
+  document.querySelectorAll("#mode button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      mode = b.dataset.mode;
+      try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+      syncMode();
+      if (data) drawList();
+    });
+  });
+  syncMode();
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function fmt(n, d) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: d == null ? 0 : d }); }
+  function money(n) { return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "\u00a0\u20ac"; }
+  function pct(x) { return Math.round(x * 100) + "%"; }
+  function setStatus(msg, isErr) {
+    $("status").innerHTML = msg ? '<div class="notice' + (isErr ? " err" : "") + '" style="margin:0 0 14px">' + esc(msg) + "</div>" : "";
+  }
+  function getJSON(url) {
+    return fetch(url).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) throw new Error(d.error);
+      return d;
+    });
+  }
+
+  // ---- the list on the left: customers (searched in Odoo), price lists, recent ----
+  var RECENT_CLIENTS_KEY = "st-stock-recent-customers";   // shared with Stock check and Customer profile
+  var ICON_P = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 9.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M3.5 17.5c.6-3.3 3.3-5.3 6.5-5.3s5.9 2 6.5 5.3"/></svg>';
+  var ICON_L = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 5.5h9M7 10h9M7 14.5h9M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01"/></svg>';
+  var hits = [], hitQuery = "", searchTimer = null;
+  function recentClients() { try { return JSON.parse(localStorage.getItem(RECENT_CLIENTS_KEY)) || []; } catch (e) { return []; } }
+  function rememberClient(c) {
+    var list = [c].concat(recentClients().filter(function (x) { return x.id !== c.id; })).slice(0, 8);
+    try { localStorage.setItem(RECENT_CLIENTS_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+  function sideRow(icon, name, sub, on, onClick) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "item-row" + (on ? " on" : "");
+    b.innerHTML = '<span class="kind">' + icon + '</span><span class="grow"><span class="nm">' + esc(name) + "</span><small>" + esc(sub) + "</small></span>";
+    b.addEventListener("click", onClick);
+    return b;
+  }
+  function clientRow(c) {
+    return sideRow(ICON_P, c.name, [c.place, c.pricelist && c.pricelist.name].filter(Boolean).join(" · "),
+      current === "c" + c.id, function () { openCustomer(c); });
+  }
+  function listRow(p) {
+    return sideRow(ICON_L, p.name, p.tag, current === p.id, function () { openPricelist(p); });
+  }
+  function group(text) { var g = document.createElement("div"); g.className = "group"; g.textContent = text; return g; }
+  function renderPricelists() {
+    var q = $("pl-filter").value.trim().toLowerCase();
+    var list = $("pl-list");
+    list.innerHTML = "";
+    if (q) {
+      var cs = hitQuery.toLowerCase() === q ? hits : [];
+      var shown = pricelists.filter(function (p) { return p.name.toLowerCase().indexOf(q) !== -1; });
+      if (cs.length) { list.appendChild(group("Customers")); cs.forEach(function (c) { list.appendChild(clientRow(c)); }); }
+      if (shown.length) { list.appendChild(group("Price lists")); shown.forEach(function (p) { list.appendChild(listRow(p)); }); }
+      if (!cs.length && !shown.length) list.innerHTML = '<div class="side-note">' +
+        (q.length >= 2 && hitQuery.toLowerCase() !== q ? "Searching customers…" : "Nothing matches.") + "</div>";
+      return;
+    }
+    var rc = recentClients();
+    if (rc.length) { list.appendChild(group("Recent customers")); rc.forEach(function (c) { list.appendChild(clientRow(c)); }); }
+    if (pricelists.length) { list.appendChild(group("Price lists")); pricelists.forEach(function (p) { list.appendChild(listRow(p)); }); }
+  }
+  function searchCustomers() {
+    var q = $("pl-filter").value.trim();
+    clearTimeout(searchTimer);
+    if (q.length < 2) return;
+    searchTimer = setTimeout(function () {
+      getJSON("/api/customers?q=" + encodeURIComponent(q)).then(function (d) {
+        if ($("pl-filter").value.trim() !== q) return;
+        hits = d.results || [];
+        hitQuery = q;
+        renderPricelists();
+      }).catch(function () {});
+    }, 250);
+  }
+
+  function loadPricelists() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(PL_CACHE_KEY));
+      if (Array.isArray(cached) && cached.length) { pricelists = cached; renderPricelists(); }
+    } catch (e) {}
+    getJSON("/api/pricelists").then(function (d) {
+      pricelists = d.results || [];
+      try { localStorage.setItem(PL_CACHE_KEY, JSON.stringify(pricelists)); } catch (e) {}
+      $("pl-count").textContent = fmt(pricelists.length);
+      renderPricelists();
+    }).catch(function (e) {
+      if (!pricelists.length) $("pl-list").innerHTML = '<div class="side-note err">Couldn\u2019t load price lists: ' + esc(e.message) + '</div>';
+    });
+  }
+  $("pl-filter").addEventListener("input", function () { searchCustomers(); renderPricelists(); });
+
+  function openPricelist(p) {
+    load(p.id, p.name, "/api/reco/pricelist?pricelist=" + p.id, "pl=" + p.id);
+  }
+  function openCustomer(c) {
+    if (c.name) rememberClient({ id: c.id, name: c.name, place: c.place, pricelist: c.pricelist });
+    load("c" + c.id, c.name || "", "/api/reco/customer?id=" + c.id, "c=" + c.id);
+  }
+  function load(key, title, url, hash) {
+    current = key;
+    data = null;
+    renderPricelists();
+    try { history.replaceState(null, "", "#" + hash); } catch (e) {}
+    $("intro").hidden = true;
+    $("view").hidden = false;
+    $("pl-name").textContent = title;
+    $("pl-meta").textContent = "";
+    $("adds-wrap").hidden = true;
+    $("list-wrap").hidden = true;
+    $("to-profile").hidden = true;
+    $("q").value = "";
+    setStatus("");
+    SalesUI.loading($("status"), "Working out recommendations from a year of everyone\u2019s orders\u2026 the first one takes about 15 seconds.", 5);
+    Promise.all([getJSON(url), SalesUI.catalogReady]).then(function (res) {
+      if (current !== key) return;
+      data = res[0];
+      if (data.client) {
+        rememberClient({ id: data.client.id, name: data.client.name, place: data.client.place, pricelist: data.pricelist });
+        renderPricelists();
+      }
+      setStatus("");
+      render();
+    }).catch(function (e) {
+      if (current === key) setStatus("Couldn\u2019t load recommendations: " + e.message, true);
+    });
+  }
+
+  // ---- results ----
+  function render() {
+    var c = data.client;
+    $("adds-title").textContent = c ? "Best additions for " + c.name : "Best additions to this price list";
+    $("adds-hint").textContent = c ? "· bought by shops with orders like theirs, never by them" : "· most bought by customers whose orders look like this price list";
+    $("list-title").textContent = c ? "Suggestions next to what they buy" : "Suggestions per SKU";
+    $("to-profile").hidden = !c;
+    if (c) {
+      $("pl-name").textContent = c.name;
+      $("pl-meta").innerHTML = "<span>" + (c.place ? esc(c.place) + " · " : "") + (data.pricelist ? "Price list <b>" + esc(data.pricelist.name) + "</b>" : "No price list") +
+        "</span><span>" + fmt(data.products.length) + " products bought in the last " + data.months + " months, biggest first</span>";
+    } else {
+    var who = data.list_customers.length
+      ? "Used by <b>" + data.list_customers.map(esc).join("</b>, <b>") + "</b>" +
+        (data.list_customer_count > data.list_customers.length ? " and " + (data.list_customer_count - data.list_customers.length) + " more" : "")
+      : "No orders on it in the last " + data.months + " months";
+    $("pl-meta").innerHTML = "<span>" + fmt(data.products.length) + " SKUs · " + who + "</span><span>Suggestions based on " +
+      fmt(data.customers_total) + " customers\u2019 orders over the last " + data.months + " months</span>";
+    }
+
+    var adds = $("adds");
+    adds.innerHTML = "";
+    $("adds-wrap").hidden = !data.additions.length;
+    data.additions.forEach(function (a) {
+      var card = document.createElement("div");
+      card.className = "add-card";
+      card.appendChild(SalesUI.thumb(a));
+      var free = a.pack ? a.free_qty / a.pack.per : a.free_qty;
+      card.insertAdjacentHTML("beforeend",
+        '<div class="t" title="' + esc(a.name) + '">' + esc(SalesUI.pretty(a.name)) + '</div><div class="s">SKU ' + esc(a.sku) + '</div>' +
+        '<div class="why">Bought by ' + fmt(a.customers) + (c ? " of " + data.similar_count + " similar shops" : " similar customers") + '</div>' +
+        '<div class="foot"><span class="badge ' + (free > 0 ? "ok" : "out") + '">' +
+          (free > 0 ? fmt(free, 1) + " " + esc(a.pack ? a.pack.label : "free") : "Out of stock") + '</span></div>');
+      adds.appendChild(card);
+    });
+
+    $("list-wrap").hidden = !data.products.length;
+    if (!data.products.length) setStatus(c ? c.name + " hasn\u2019t ordered in the last " + data.months + " months, so there\u2019s nothing to recommend from."
+      : "This price list doesn\u2019t name specific products, so there\u2019s nothing to recommend from.");
+    drawList();
+  }
+
+  var observer = null;
+  function drawList() {
+    var q = $("q").value.trim().toLowerCase();
+    var shown = data.products.filter(function (p) {
+      return !q || p.name.toLowerCase().indexOf(q) !== -1 || (p.sku || "").toLowerCase().indexOf(q) !== -1;
+    });
+    var list = $("list");
+    list.innerHTML = "";
+    if (!shown.length) { list.innerHTML = '<div class="empty">No SKU on this price list matches.</div>'; return; }
+    var drawn = 0;
+    var more = document.createElement("div");
+    more.className = "more";
+    list.appendChild(more);
+    function batch() {
+      var frag = document.createDocumentFragment();
+      shown.slice(drawn, drawn + BATCH).forEach(function (p) { frag.appendChild(skuRow(p)); });
+      drawn = Math.min(drawn + BATCH, shown.length);
+      list.insertBefore(frag, more);
+      more.textContent = drawn < shown.length ? "Showing " + fmt(drawn) + " of " + fmt(shown.length) + "\u2026" : "";
+      if (drawn >= shown.length && observer) observer.disconnect();
+    }
+    if (observer) observer.disconnect();
+    observer = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; }) && drawn < shown.length) batch();
+    }, { rootMargin: "600px 0px" });
+    batch();
+    if (drawn < shown.length) observer.observe(more);
+  }
+  $("q").addEventListener("input", function () { if (data) drawList(); });
+
+  function skuRow(p) {
+    var row = document.createElement("div");
+    row.className = "sku";
+    var me = document.createElement("div");
+    me.className = "me";
+    me.appendChild(SalesUI.thumb(p));
+    me.insertAdjacentHTML("beforeend", '<div style="min-width:0"><div class="t" title="' + esc(p.name) + '">' + esc(SalesUI.pretty(p.name)) + '</div>' +
+      '<div class="s">SKU <b>' + esc(p.sku) + '</b>' + (p.price != null ? " · " + money(p.price) : "") +
+      ' · ' + (p.spent != null ? "they spent " + money(p.spent) : p.customers ? "bought by " + fmt(p.customers) + " customers" : "no orders yet") + '</div></div>');
+    row.appendChild(me);
+    var recs = document.createElement("div");
+    recs.className = "recs";
+    var recos = suggestionsFor(p);
+    if (!recos.length) recs.innerHTML = '<div class="no-recos">' + (mode === "together"
+      ? "No bought-together pattern yet for this SKU."
+      : mode === "similar" ? "No similar product found." : "No suggestion yet: not enough orders or similar products.") + '</div>';
+    recos.forEach(function (r) {
+      var el = document.createElement("div");
+      el.className = "reco " + r.kind;
+      el.title = r.kind === "together"
+        ? pct(r.confidence) + " of the " + r.buyers + " customers who buy " + SalesUI.pretty(p.name) + " also buy this (" + fmt(r.lift, 1) + "\u00d7 more than customers overall)"
+        : "Similar name (" + r.shared.join(", ") + ")" + (r.popularity ? ", bought by " + r.popularity + " customers" : "");
+      el.appendChild(SalesUI.thumb(r));
+      el.insertAdjacentHTML("beforeend", '<div style="min-width:0"><div class="t">' + esc(SalesUI.pretty(r.name)) + '</div>' +
+        '<div class="why">' + (r.kind === "together"
+          ? "Bought together <span>· " + pct(r.confidence) + " of its buyers</span>"
+          : "Similar <span>· " + esc(r.shared.slice(0, 2).join(" ").toLowerCase()) + "</span>") + '</div></div>');
+      recs.appendChild(el);
+    });
+    row.appendChild(recs);
+    return row;
+  }
+
+  $("to-stock").addEventListener("click", function () {
+    if (data && data.client) { if (data.pricelist) SalesUI.go("stock", "pl=" + data.pricelist.id + "&client=" + data.client.id); }
+    else if (current) SalesUI.go("stock", "pl=" + current);
+  });
+  $("to-profile").addEventListener("click", function () { if (data && data.client) SalesUI.go("customer", String(data.client.id)); });
+  loadPricelists();
+  // #c=<customer> or #pl=<price list> opens it (a bookmark, or a link from another tool).
+  function fromHash() {
+    var h = new URLSearchParams(location.hash.slice(1));
+    var cid = parseInt(h.get("c"), 10), pl = parseInt(h.get("pl"), 10);
+    if (cid && current !== "c" + cid) openCustomer(recentClients().filter(function (c) { return c.id === cid; })[0] || { id: cid });
+    else if (pl && current !== pl) openPricelist(pricelists.filter(function (p) { return p.id === pl; })[0] || { id: pl, name: "" });
+  }
+  window.addEventListener("hashchange", fromHash);
+  fromHash();
+</script>
+<script src="assets/how-it-works.js"></script>
+<script>
+  SalesHelp.setup({
+    key: "reco",
+    title: "Recommendations",
+    steps: [
+      ["Search for a customer", "on the left (or pick a whole price list). Customers you opened lately, here or in the other tools, sit under <b>Recent customers</b>."],
+      ["Best additions", "at the top: products that shops with orders like theirs buy, and they never have."],
+      ["Suggestions next to what they buy", "their products, biggest first, each with ideas next to it. <b style=\"color:#6d3fc0\">Bought together</b>: customers who buy this SKU also buy it (the % says how many). <b>Similar</b>: an alternative with the same brand, type or flavour."],
+      ["Choose what you see", "<b>Both</b>, only <b>Bought together</b> or only <b>Similar</b>. Hover a suggestion for the exact numbers; search to find a SKU."]
+    ],
+    tips: [
+      "Suggestions are always new to them: never something they already buy (or that's on the price list), another size of it, or a sample.",
+      "Based on all customers' orders from the last 12 months."
+    ]
+  });
+</script>
+</body>
+</html>

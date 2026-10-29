@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Restock requests · Sales Tools</title>
+<script src="assets/demo-api.js"></script>
+<link rel="stylesheet" href="assets/sales.css">
+<style>
+  body { overflow-y: auto; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 22px 22px 60px; }
+
+  /* ---- heading ---- */
+  .head { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .head h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  .head .meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .head .pills { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill.green { background: var(--good-soft); color: var(--good); }
+  .linkish:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+  .linkish.warn { color: var(--warn); }
+  .on-state { color: var(--good); font-weight: 600; }
+
+  /* ---- alert strip ---- */
+  .alert {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 16px;
+    border-radius: 12px; background: var(--good-soft); color: var(--good); font-weight: 600; font-size: 13.5px;
+  }
+  .alert .grow { flex: 1; }
+  .alert button {
+    border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 8px;
+    padding: 5px 10px; font-size: 12.5px; font-weight: 650; cursor: pointer;
+  }
+
+  /* ---- add form ---- */
+  .add {
+    border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+    box-shadow: var(--shadow); padding: 16px; margin-bottom: 20px;
+  }
+  .add h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .add-grid { display: grid; gap: 10px; grid-template-columns: minmax(240px, 2.2fr) minmax(140px, 1.2fr) 110px minmax(140px, 1.5fr) auto; align-items: end; }
+  .field label { display: block; font-size: 11.5px; font-weight: 650; color: var(--muted); margin: 0 0 4px 2px; }
+  .sku-field { position: relative; }
+  .picked { font-size: 12px; color: var(--good); margin: 5px 0 0 2px; min-height: 17px; }
+  .picked.err { color: var(--red); }
+  .suggest {
+    position: absolute; top: calc(100% - 18px); left: 0; right: 0; z-index: 20; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-lg); max-height: 280px; overflow-y: auto;
+  }
+  .suggest button {
+    display: flex; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent;
+    padding: 9px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--line);
+  }
+  .suggest button:last-child { border-bottom: 0; }
+  .suggest button:hover, .suggest button.on { background: var(--blue-lt); }
+  .suggest b { font-variant-numeric: tabular-nums; min-width: 54px; color: var(--navy-dk); }
+  .suggest .none { padding: 10px 12px; font-size: 13px; color: var(--muted); }
+
+  /* ---- list ---- */
+  .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters .search { flex: 1; min-width: 200px; }
+  .add .btn { padding: 9px 16px; font-size: 13.5px; justify-content: center; }
+  .seg .n { font-variant-numeric: tabular-nums; opacity: .75; margin-left: 3px; }
+
+  .row {
+    display: grid; align-items: center; gap: 14px;
+    grid-template-columns: 56px minmax(200px, 1fr) 90px 230px 132px 28px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+    padding: 8px 12px 8px 8px; margin-bottom: 8px;
+  }
+  .row.hot { border-color: rgba(19,122,75,.45); box-shadow: inset 3px 0 0 var(--good); }
+  .row.done { opacity: .6; }
+  .who .t { font-weight: 600; font-size: 13px; line-height: 1.3; }
+  .who .s { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .who .s b { color: var(--ink); font-weight: 600; }
+  .who .note { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-style: italic; }
+  .qty { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; }
+  .qty .u { display: block; font-size: 10.5px; color: var(--muted); font-weight: 500; }
+  .avail {
+    display: inline-block; padding: 5px 9px; border-radius: 7px; font-size: 12px; font-weight: 650; line-height: 1.3;
+  }
+  .avail.in { background: var(--good-soft); color: var(--good); }
+  .avail.partial { background: var(--warn-soft); color: var(--warn); }
+  .avail.coming { background: var(--blue-lt); color: var(--navy-dk); }
+  .avail.none { background: var(--bad-soft); color: var(--red); }
+  .avail.unknown { background: var(--soft); color: var(--muted); }
+  .new-tag {
+    display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 750; letter-spacing: .05em;
+    text-transform: uppercase; color: #fff; background: var(--good); border-radius: 4px; padding: 1px 5px;
+    vertical-align: 1px;
+  }
+  .status { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); font-size: 12.5px; }
+  .del {
+    width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+    font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .del:hover { background: var(--soft); color: var(--red); }
+  .row .thumb { width: 56px; height: 56px; }
+  .empty { text-align: center; color: var(--muted); padding: 50px 20px; font-size: 13.5px; }
+  .empty h3 { color: var(--ink); margin: 0 0 6px; font-size: 15px; }
+  .err-line { color: var(--red); font-size: 13px; margin: 0 0 12px; }
+
+  @media (max-width: 900px) {
+    .add-grid { grid-template-columns: 1fr 1fr; }
+    .add-grid .field.sku-field, .add-grid .field.notes { grid-column: 1 / -1; }
+    .row { grid-template-columns: 52px minmax(0, 1fr) 120px; }
+    .row .qty { display: none; }
+    .row .avail-cell { grid-column: 2 / 3; }
+    .row .status-cell { grid-column: 3 / 4; grid-row: 1; }
+    .row .del { grid-column: 3 / 4; justify-self: end; }
+    .row .thumb { width: 52px; height: 52px; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 16px 16px 48px; }
+    .add-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>Restock requests</h1>
+      <div class="meta"><span id="checked">Not checked yet</span> · <button type="button" class="linkish" id="check-now">Check now</button>
+<span id="alerts-wrap" hidden> · <span id="alerts-state"></span></span></div>
+    </div>
+    <div class="pills">
+      <span class="pill" id="pill-waiting">0 waiting</span>
+      <span class="pill green" id="pill-in">0 back in stock</span>
+    </div>
+  </div>
+
+  <div class="alert" id="alert" hidden>
+    <span class="grow" id="alert-text"></span>
+    <button type="button" id="alert-show">Show them</button>
+  </div>
+
+  <form class="add" id="add-form" autocomplete="off">
+    <h2>Add a request</h2>
+    <div class="add-grid">
+      <div class="field sku-field">
+        <label for="f-sku">Product (SKU or name)</label>
+        <input class="txt" id="f-sku" placeholder="e.g. 30003 or Casa Roja habanero" required>
+        <div class="picked" id="picked"></div>
+        <div class="suggest" id="suggest" hidden></div>
+      </div>
+      <div class="field">
+        <label for="f-customer">Customer</label>
+        <input class="txt" id="f-customer" placeholder="e.g. Taqueria Luna">
+        <div class="picked"></div>
+      </div>
+      <div class="field">
+        <label for="f-qty">Qty needed</label>
+        <input class="txt" id="f-qty" type="number" min="0" step="any" placeholder="cases">
+        <div class="picked"></div>
+      </div>
+      <div class="field notes">
+        <label for="f-notes">Notes</label>
+        <input class="txt" id="f-notes" placeholder="Optional">
+        <div class="picked"></div>
+      </div>
+      <div class="field">
+        <button class="btn primary" id="f-add" type="submit" disabled>Add request</button>
+        <div class="picked"></div>
+      </div>
+    </div>
+  </form>
+
+  <div class="err-line" id="err" hidden></div>
+
+  <div class="filters">
+    <div class="search"><input class="txt" id="q" placeholder="Search your requests by SKU, product or customer…"></div>
+    <div class="seg" id="seg">
+      <button type="button" data-f="open" class="on">Waiting<span class="n" id="n-open"></span></button>
+      <button type="button" data-f="in">Back in stock<span class="n" id="n-in"></span></button>
+      <button type="button" data-f="done">Handled<span class="n" id="n-done"></span></button>
+      <button type="button" data-f="all">All</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script src="assets/sales.js"></script>
+<script src="assets/restock-core.js"></script>
+<script>
+  var R = window.SalesRestock;
+  var listEl = document.getElementById("list");
+  var errEl = document.getElementById("err");
+  var filter = "open";
+  var picked = null;           // {sku, name} chosen from the search
+  var REFRESH_MS = 10 * 60 * 1000;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function fmtNum(n) { return n.toLocaleString(undefined, { maximumFractionDigits: 1 }); }
+
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  }
+
+  function showError(msg) {
+    errEl.textContent = msg || "";
+    errEl.hidden = !msg;
+  }
+
+  // ---- photos: from the API on a Mac, from the published catalogue online ----
+  var catalogImages = null;
+  function loadCatalogImages() {
+    if (catalogImages) return Promise.resolve(catalogImages);
+    catalogImages = {};
+    return fetch("data/catalog.json").then(function (r) { return r.json(); }).then(function (cat) {
+      var pub = cat.photos_published || {};
+      (cat.products || []).forEach(function (p) {
+        if (!p.sku) return;
+        var list = [];
+        if (pub[p.sku]) list.push("photos/" + encodeURIComponent(p.sku) + ".jpg");
+        if (p.image) list.push(p.image);
+        if (list.length) catalogImages[p.sku] = list;
+      });
+      return catalogImages;
+    }).catch(function () { return catalogImages; });
+  }
+
+  function thumb(r) {
+    var box = document.createElement("div");
+    box.className = "thumb";
+    var list = ((r.stock && r.stock.images) || (catalogImages && catalogImages[r.sku]) || []).slice();
+    if (!list.length) { box.classList.add("none"); return box; }
+    var img = document.createElement("img");
+    img.loading = "lazy";
+    img.alt = "";
+    img.onerror = function () {
+      if (list.length) img.src = list.shift();
+      else { img.remove(); box.classList.add("none"); }
+    };
+    img.src = list.shift();
+    box.appendChild(img);
+    return box;
+  }
+
+  // ---- the list ----
+  function counts(all) {
+    var open = all.filter(R.isOpen);
+    return { open: open.length, in: R.alerts(all).length, done: all.length - open.length };
+  }
+
+  function render() {
+    var all = R.load();
+    var c = counts(all);
+    document.getElementById("pill-waiting").textContent = c.open + " waiting";
+    document.getElementById("pill-in").textContent = c.in + " back in stock";
+    document.getElementById("n-open").textContent = c.open ? c.open : "";
+    document.getElementById("n-in").textContent = c.in ? c.in : "";
+    document.getElementById("n-done").textContent = c.done ? c.done : "";
+    var alertBox = document.getElementById("alert");
+    alertBox.hidden = !c.in || filter === "in";
+    document.getElementById("alert-text").textContent = c.in === 1
+      ? "1 request is back in stock. Let the customer know, then mark it as told."
+      : c.in + " requests are back in stock. Let the customers know, then mark them as told.";
+    var checked = R.lastChecked();
+    document.getElementById("checked").textContent = checked
+      ? "Stock checked " + new Date(checked).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+      : "Not checked yet";
+
+    var q = document.getElementById("q").value.trim().toLowerCase();
+    var shown = all.filter(function (r) {
+      var avail = R.availability(r).kind;
+      if (filter === "open" && !R.isOpen(r)) return false;
+      if (filter === "in" && !(R.isOpen(r) && (avail === "in" || avail === "partial"))) return false;
+      if (filter === "done" && R.isOpen(r)) return false;
+      if (!q) return true;
+      return [r.sku, r.name, r.customer, r.notes].some(function (v) { return (v || "").toLowerCase().indexOf(q) !== -1; });
+    });
+    // Back-in-stock first, then the most recent.
+    var rank = { in: 0, partial: 1, coming: 2, none: 3, unknown: 4 };
+    shown.sort(function (a, b) {
+      var ra = R.isOpen(a) ? rank[R.availability(a).kind] : 9;
+      var rb = R.isOpen(b) ? rank[R.availability(b).kind] : 9;
+      return ra - rb || (b.created || "").localeCompare(a.created || "");
+    });
+
+    listEl.innerHTML = "";
+    if (!shown.length) {
+      listEl.innerHTML = all.length
+        ? '<div class="empty">Nothing here.</div>'
+        : '<div class="empty"><h3>No requests yet</h3>Add a SKU a customer is waiting for, and this page tells you when it\'s back in stock.</div>';
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    shown.forEach(function (r) { frag.appendChild(rowEl(r)); });
+    listEl.appendChild(frag);
+  }
+
+  function rowEl(r) {
+    var a = R.availability(r);
+    var hot = R.isOpen(r) && (a.kind === "in" || a.kind === "partial");
+    var row = document.createElement("div");
+    row.className = "row" + (hot ? " hot" : "") + (R.isOpen(r) ? "" : " done");
+    row.appendChild(thumb(r));
+    var unit = r.stock ? R.packLabel(r.stock) : "";
+    row.insertAdjacentHTML("beforeend",
+      '<div class="who"><div class="t" title="' + esc(r.name || "") + '">' + esc(r.name ? SalesUI.pretty(r.name) : r.sku) + '</div>' +
+        '<div class="s">SKU <b>' + esc(r.sku) + '</b>' + (r.customer ? ' · for <b>' + esc(r.customer) + '</b>' : '') +
+        ' · added ' + esc(fmtDate(r.created)) + '</div>' +
+        (r.notes ? '<div class="note">' + esc(r.notes) + '</div>' : '') + '</div>' +
+      '<div class="qty">' + (r.qty ? esc(fmtNum(r.qty)) + '<span class="u">' + esc(unit || "needed") + '</span>' : '<span class="u">no qty</span>') + '</div>' +
+      '<div class="avail-cell"><span class="avail ' + a.kind + '">' + esc(a.text) + '</span>' +
+        (hot && r.availableSince ? '<span class="new-tag">New</span>' : '') + '</div>' +
+      '<div class="status-cell"><select class="status" aria-label="Status">' +
+        '<option value="waiting">Waiting</option><option value="told">Told client</option><option value="done">Done</option>' +
+      '</select></div>' +
+      '<button type="button" class="del" title="Remove this request" aria-label="Remove">&times;</button>');
+    var sel = row.querySelector(".status");
+    sel.value = r.status;
+    sel.addEventListener("change", function () {
+      R.update(r.id, { status: sel.value });
+      render();
+      if (sel.value === "waiting") checkNow();
+    });
+    row.querySelector(".del").addEventListener("click", function () {
+      if (confirm("Remove the request for " + (r.name || r.sku) + "?")) { R.remove(r.id); render(); }
+    });
+    return row;
+  }
+
+  // ---- checking stock ----
+  var checking = false;
+  function checkNow() {
+    if (checking) return;
+    var btn = document.getElementById("check-now");
+    checking = true;
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+    showError("");
+    R.refresh().then(function (res) {
+      R.popUp(res.arrived);
+      render();
+    }).catch(function (e) {
+      showError("Couldn't check stock: " + e.message);
+    }).then(function () {
+      checking = false;
+      btn.disabled = false;
+      btn.textContent = "Check now";
+    });
+  }
+
+  // ---- product search for the form ----
+  var skuInput = document.getElementById("f-sku");
+  var suggest = document.getElementById("suggest");
+  var pickedEl = document.getElementById("picked");
+  var addBtn = document.getElementById("f-add");
+  var debounce = null;
+  var lastQuery = "";
+
+  function setPicked(p) {
+    picked = p;
+    addBtn.disabled = !p;
+    pickedEl.classList.remove("err");
+    pickedEl.textContent = p ? "✓ " + p.name : "";
+  }
+
+  skuInput.addEventListener("input", function () {
+    setPicked(null);
+    clearTimeout(debounce);
+    var q = skuInput.value.trim();
+    if (q.length < 2) { suggest.hidden = true; return; }
+    debounce = setTimeout(function () {
+      lastQuery = q;
+      fetch("/api/products?q=" + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (d) {
+        if (q !== lastQuery) return;
+        if (d.error) throw new Error(d.error);
+        var results = d.results || [];
+        suggest.innerHTML = "";
+        if (!results.length) {
+          suggest.innerHTML = '<div class="none">No product with that SKU or name.</div>';
+        }
+        results.forEach(function (p) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.innerHTML = "<b>" + esc(p.sku) + "</b><span>" + esc(SalesUI.pretty(p.name)) + "</span>";
+          b.addEventListener("click", function () {
+            skuInput.value = p.sku;
+            setPicked(p);
+            suggest.hidden = true;
+            document.getElementById("f-customer").focus();
+          });
+          suggest.appendChild(b);
+        });
+        suggest.hidden = false;
+        // An exact SKU typed in full is picked straight away.
+        var exact = results.filter(function (p) { return p.sku.toLowerCase() === q.toLowerCase(); })[0];
+        if (exact) setPicked(exact);
+      }).catch(function (e) {
+        pickedEl.classList.add("err");
+        pickedEl.textContent = "Couldn't search Odoo: " + e.message;
+      });
+    }, 250);
+  });
+
+  document.addEventListener("click", function (e) {
+    if (!suggest.contains(e.target) && e.target !== skuInput) suggest.hidden = true;
+  });
+  skuInput.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") suggest.hidden = true;
+  });
+
+  document.getElementById("add-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!picked) return;
+    R.add({
+      sku: picked.sku,
+      name: picked.name,
+      customer: document.getElementById("f-customer").value,
+      qty: document.getElementById("f-qty").value,
+      notes: document.getElementById("f-notes").value
+    });
+    this.reset();
+    setPicked(null);
+    suggest.hidden = true;
+    filter = "open";
+    syncSeg();
+    render();
+    checkNow();
+    skuInput.focus();
+  });
+
+  // ---- filters ----
+  function syncSeg() {
+    document.querySelectorAll("#seg button").forEach(function (b) { b.classList.toggle("on", b.dataset.f === filter); });
+  }
+  document.querySelectorAll("#seg button").forEach(function (b) {
+    b.addEventListener("click", function () { filter = b.dataset.f; syncSeg(); render(); });
+  });
+  document.getElementById("q").addEventListener("input", render);
+  document.getElementById("alert-show").addEventListener("click", function () { filter = "in"; syncSeg(); render(); });
+  document.getElementById("check-now").addEventListener("click", checkNow);
+
+  // ---- browser pop-ups: always say whether they're on, and how to change it ----
+  var BLOCKED_HELP = "Pop-up alerts are blocked in this browser. To allow them: click the icon at the " +
+    "left of the address bar (or the site settings in your browser), set Notifications to Allow, then " +
+    "reload this page. On a Mac, also check System Settings → Notifications → your browser → Allow notifications.";
+
+  function syncAlertsState() {
+    var wrap = document.getElementById("alerts-wrap");
+    var box = document.getElementById("alerts-state");
+    if (!("Notification" in window)) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    box.innerHTML = "";
+    var perm = Notification.permission;
+    if (perm === "granted") {
+      box.innerHTML = '<span class="on-state">Pop-up alerts on ✓</span>';
+    } else if (perm === "denied") {
+      box.innerHTML = '<button type="button" class="linkish warn" id="alerts-help">Pop-up alerts blocked – how to turn on</button>';
+      document.getElementById("alerts-help").addEventListener("click", function () { alert(BLOCKED_HELP); });
+    } else {
+      box.innerHTML = '<button type="button" class="linkish" id="alerts-ask">Turn on pop-up alerts</button>';
+      document.getElementById("alerts-ask").addEventListener("click", function () {
+        Notification.requestPermission().then(syncAlertsState);
+      });
+    }
+  }
+  syncAlertsState();
+  // Coming back after changing the browser setting updates the line.
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) syncAlertsState(); });
+
+  // Another tab (or the landing page) may update the list.
+  window.addEventListener("storage", function (e) {
+    if (e.key && e.key.indexOf("st-restock-requests") === 0) render();
+  });
+
+  R.init().then(function () {
+    render();
+    return loadCatalogImages();
+  }).then(function () {
+    render();
+    checkNow();
+    setInterval(checkNow, REFRESH_MS);
+  });
+</script>
+<script src="assets/how-it-works.js"></script>
+<script>
+  SalesHelp.setup({
+    key: "restock",
+    title: "Restock requests",
+    steps: [
+      ["Add a request", "type a SKU or product name, pick it from the list, add the customer, how many cases they need and any notes, then <b>Add request</b>."],
+      ["Read the status", "<b style=\"color:#137a4b\">green</b> = in stock now, <b style=\"color:#a15c00\">orange</b> = only some free, <b>blue</b> = arriving on a date, <b style=\"color:#d82332\">red</b> = out of stock with nothing ordered."],
+      ["Get told when it's in", "a green number appears on the 🔔 bell on every page, the home page shows a banner and the request gets a <b>New</b> tag. For pop-ups too, click <b>Turn on pop-up alerts</b>."],
+      ["Close it", "once you've told the customer, set the request to <b>Told client</b> or <b>Done</b> and the alert goes away."]
+    ],
+    tips: [
+      "Your list is your own and is kept in this browser, so use the same computer and browser.",
+      "Stock is checked when you open the site and every 10 minutes while it's open. <b>Check now</b> checks straight away."
+    ]
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Customer profile · Sales Tools</title>
+<script src="assets/demo-api.js"></script>
+<link rel="stylesheet" href="assets/sales.css">
+<style>
+  :root { --last-year: #c9d3e0; --orange: #b35a0c; --orange-soft: rgba(214,110,20,.12); }
+  @media (prefers-color-scheme: dark) { :root { --last-year: #3a4357; --orange: #f0a35e; --orange-soft: rgba(240,163,94,.15); } }
+
+  .locs { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .locs .l { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+  .pane { display: flex; flex-direction: column; gap: 24px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .kpi { padding: 13px 15px; }
+  .kpi .l { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+  .kpi .v { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .kpi .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .kpi .s b { font-weight: 700; }
+  .kpi.alert { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange) inset; }
+
+  /* Month-by-month bars: last year behind, this year in front. */
+  .chart { padding: 16px 18px 10px; }
+  .bars { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; height: 150px; align-items: end; }
+  .month { height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+  .month .b { width: 42%; max-width: 18px; border-radius: 3px 3px 0 0; min-height: 1px; }
+  .month .b.last { background: var(--last-year); }
+  .month .b.now { background: var(--navy); }
+  .months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+  .months span { text-align: center; font-size: 10.5px; color: var(--muted); }
+  .legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  /* The three things to bring up on the call. */
+  .talk { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .box { padding: 13px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .box h3 { margin: 0 0 2px; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+  .box h3 .n { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .box p.hint { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+  .item { display: flex; gap: 9px; align-items: center; padding: 5px; border-radius: 8px; background: var(--soft); min-width: 0; }
+  .item .thumb { width: 42px; height: 42px; }
+  .item .t { font-size: 12.5px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .s { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .item .grow { flex: 1; min-width: 0; }
+  .box .none { font-size: 12.5px; color: var(--muted); padding: 6px 2px; }
+  .box .all { align-self: flex-start; margin-top: 2px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+  .dot.due { background: var(--orange); }
+  .dot.stopped { background: var(--red); }
+  .dot.idea { background: var(--violet); }
+  .badge.due { background: var(--orange-soft); color: var(--orange); }
+  .badge.stopped { background: var(--bad-soft); color: var(--bad); }
+  .badge.new { background: var(--blue-lt); color: var(--navy-dk); }
+  .badge.once, .badge.regular { background: var(--soft); color: var(--muted); }
+
+  .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters .search { flex: 1; min-width: 200px; }
+  .rows { overflow: hidden; }
+  .grid { display: grid; grid-template-columns: 44px minmax(0, 1fr) 70px 96px 110px 90px 104px 92px; gap: 12px; align-items: center; }
+  .cols { padding: 8px 12px; background: var(--soft); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+  .row { padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12.5px; }
+  .row .thumb { width: 44px; height: 44px; }
+  .row .t { font-weight: 600; line-height: 1.3; }
+  .row .s { font-size: 11px; color: var(--muted); }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .row .r small { display: block; color: var(--muted); font-size: 10.5px; }
+  .more { text-align: center; padding: 10px; }
+  .orders .grid { grid-template-columns: 90px 100px minmax(0, 1fr) 80px 80px 100px; }
+  .foot { font-size: 11.5px; color: var(--muted); }
+
+  @media (max-width: 1150px) {
+    .talk { grid-template-columns: 1fr; }
+    .grid { grid-template-columns: 44px minmax(0, 1fr) 110px 104px 92px; }
+    .hide-md { display: none; }
+  }
+  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 44px minmax(0, 1fr) 92px; }
+    .hide-sm { display: none; }
+    .orders .grid { grid-template-columns: 80px minmax(0, 1fr) 70px; }
+    .bars, .months { gap: 3px; }
+  }
+</style>
+</head>
+<body>
+<div class="tool">
+  <aside class="side">
+    <div class="side-head"><h3>Customers</h3></div>
+    <div class="search"><input class="txt" id="find" placeholder="Search customers…" autocomplete="off"></div>
+    <div class="side-list" id="side-list"></div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="empty-state" id="intro">
+      <div class="ic"><svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 9.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M3.5 17.5c.6-3.3 3.3-5.3 6.5-5.3s5.9 2 6.5 5.3"/></svg></div>
+      <h2>Search for a customer</h2>
+      <p>A one-page brief to read before a visit or a call: this year against last year, what they buy and how often, what's due or dropped, open orders, and what similar shops buy that they don't.</p>
+    </div>
+    <div id="out"></div>
+  </main>
+</div>
+
+<script src="assets/sales.js"></script>
+<script>
+(function () {
+  var UI = window.SalesUI, esc = UI.esc;
+  function $(id) { return document.getElementById(id); }
+  var money = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+  function eur(n) { return n == null ? "—" : money.format(n); }
+  function num(n) { return n == null ? "—" : (Math.round(n * 10) / 10).toLocaleString(); }
+  function day(iso) {
+    if (!iso) return "—";
+    return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  }
+  function ago(days) {
+    if (days == null) return "";
+    if (days === 0) return "today";
+    if (days < 60) return days + " day" + (days === 1 ? "" : "s") + " ago";
+    var m = Math.round(days / 30.4);
+    return m < 24 ? m + " months ago" : Math.round(days / 365) + " years ago";
+  }
+  function every(days) {
+    if (!days) return "—";
+    if (days < 14) return "every " + days + " days";
+    if (days < 60) return "every ~" + Math.round(days / 7) + " wks";
+    return "every ~" + Math.round(days / 30.4) + " mo";
+  }
+  function getJSON(url) {
+    return fetch(url).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) throw new Error(d.error);
+      return d;
+    });
+  }
+
+  // ---- customers: search, recent (shared with Stock check) ----
+  var RECENT_KEY = "st-stock-recent-customers";
+  function recent() { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; } }
+  function remember(c) {
+    var list = [c].concat(recent().filter(function (x) { return x.id !== c.id; })).slice(0, 8);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+
+  var hits = [], hitQuery = "", timer = null, openId = null;
+  var ICON = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 9.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M3.5 17.5c.6-3.3 3.3-5.3 6.5-5.3s5.9 2 6.5 5.3"/></svg>';
+
+  function row(c) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "item-row" + (c.id === openId ? " on" : "");
+    b.innerHTML = '<span class="kind">' + ICON + '</span><span class="grow"><span class="nm">' + esc(c.name) + "</span><small>" +
+      esc([c.place, c.pricelist && c.pricelist.name].filter(Boolean).join(" · ")) + "</small></span>";
+    b.addEventListener("click", function () { open(c); });
+    return b;
+  }
+  function note(text, err) { return '<div class="side-note' + (err ? " err" : "") + '">' + text + "</div>"; }
+  function renderList() {
+    var q = $("find").value.trim();
+    var list = $("side-list");
+    list.innerHTML = "";
+    if (q.length >= 2) {
+      if (hitQuery !== q) { list.innerHTML = note("Searching…"); return; }
+      if (!hits.length) { list.innerHTML = note("No customer matches “" + esc(q) + "”."); return; }
+      hits.forEach(function (c) { list.appendChild(row(c)); });
+      return;
+    }
+    var r = recent();
+    if (!r.length) { list.innerHTML = note("Type at least 2 letters of a customer's name."); return; }
+    list.insertAdjacentHTML("beforeend", '<div class="group">Recent</div>');
+    r.forEach(function (c) { list.appendChild(row(c)); });
+  }
+  $("find").addEventListener("input", function () {
+    var q = $("find").value.trim();
+    clearTimeout(timer);
+    renderList();
+    if (q.length < 2) return;
+    timer = setTimeout(function () {
+      getJSON("/api/customers?q=" + encodeURIComponent(q)).then(function (d) {
+        if ($("find").value.trim() !== q) return;
+        hits = d.results || [];
+        hitQuery = q;
+        renderList();
+      }).catch(function (e) {
+        $("side-list").innerHTML = note("Couldn't search Odoo: " + esc(e.message), true);
+      });
+    }, 250);
+  });
+
+  // ---- one customer ----
+  function open(c, location) {
+    openId = c.id;
+    if (c.name) remember({ id: c.id, name: c.name, place: c.place, pricelist: c.pricelist });
+    renderList();
+    $("intro").hidden = true;
+    UI.loading($("out"), "Reading " + (c.name ? c.name + "'s" : "their") + " orders" + (location ? " for " + location : "") +
+      " from Odoo… the first customer takes about 15 seconds.", 5);
+    try { history.replaceState(null, "", "#" + c.id); } catch (e) {}
+    getJSON("/api/customer-profile?id=" + c.id + (location ? "&location=" + encodeURIComponent(location) : "")).then(function (d) {
+      if (openId !== c.id) return;
+      // Opened from a link: now we know who it is, keep it under Recent.
+      remember({ id: d.client.id, name: d.client.name, place: d.client.place, pricelist: d.client.pricelist });
+      renderList();
+      render(d);
+    }).catch(function (e) {
+      if (openId !== c.id) return;
+      $("out").innerHTML = '<div class="notice err">Couldn\'t load this customer: ' + esc(e.message) + "</div>";
+    });
+  }
+
+  function kpi(label, value, sub, alert) {
+    return '<div class="card kpi' + (alert ? " alert" : "") + '"><div class="l">' + label + '</div><div class="v">' + value + '</div><div class="s">' + (sub || "&nbsp;") + "</div></div>";
+  }
+
+  function render(d) {
+    var c = d.client, t = d.totals, o = d.orders, y = d.year;
+    var where = d.location ? " · " + esc(d.location) : "";
+    var out = $("out");
+    out.innerHTML = "";
+
+    var meta = [];
+    if (c.place) meta.push(esc(c.place));
+    if (c.pricelist) meta.push("Price list <b>" + esc(c.pricelist.name) + "</b>");
+    if (c.salesperson) meta.push("Salesperson <b>" + esc(c.salesperson) + "</b>");
+    if (c.phone) meta.push('<a href="tel:' + esc(c.phone.replace(/\s/g, "")) + '">' + esc(c.phone) + "</a>");
+    if (c.email) meta.push('<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + "</a>");
+    if (c.first_order) meta.push("Customer since " + esc(day(c.first_order)));
+    meta.push('Test data · <button type="button" class="linkish" data-refresh>Refresh</button>');
+    var head = document.createElement("div");
+    head.className = "page-head";
+    head.innerHTML = '<div class="top"><div><h1>' + esc(c.name) + '</h1><div class="meta">' +
+      meta.map(function (m) { return "<span>" + m + "</span>"; }).join("") + "</div></div>" +
+      '<div class="actions"><button type="button" class="btn" data-reco>Recommendations →</button>' +
+      (c.pricelist ? '<button type="button" class="btn" data-stock>Check stock →</button>' : "") + "</div></div>";
+    head.querySelector("[data-refresh]").addEventListener("click", function () { open(c, d.location); });
+    var stockBtn = head.querySelector("[data-stock]");
+    if (stockBtn) stockBtn.addEventListener("click", function () { UI.go("stock", "pl=" + c.pricelist.id + "&client=" + c.id); });
+    head.querySelector("[data-reco]").addEventListener("click", function () { UI.go("reco", "c=" + c.id); });
+    // Several shops under one company (Madrid and Barcelona, say):
+    // pick one, by where the orders were delivered.
+    if (d.locations && d.locations.length) {
+      var seg = document.createElement("div");
+      seg.className = "locs";
+      seg.innerHTML = '<span class="l">Delivered to</span><div class="seg">' +
+        '<button data-loc=""' + (d.location ? "" : ' class="on"') + ">All locations</button>" +
+        d.locations.map(function (l) {
+          return '<button data-loc="' + esc(l.name) + '"' + (d.location === l.name ? ' class="on"' : "") +
+            ' title="' + (l.places ? l.places + " places · " : "") + l.orders + " orders since 1 Jan " + (y - 1) + " · " + esc(eur(l.total)) + '">' +
+            esc(l.name) + " <small>" + l.orders + "</small></button>";
+        }).join("") + "</div>";
+      seg.querySelectorAll("button").forEach(function (b) {
+        b.addEventListener("click", function () { open(c, b.dataset.loc || null); });
+      });
+      head.appendChild(seg);
+    }
+    out.appendChild(head);
+
+    var pane = document.createElement("div");
+    pane.className = "pane";
+    out.appendChild(pane);
+
+    if (!d.products.length && !t.now && !t.last_full) {
+      pane.innerHTML = '<div class="card"><div class="empty">No orders since 1 January ' + (y - 1) + "." +
+        (c.last_order ? " Their last order was on <b>" + esc(day(c.last_order)) + "</b> (" + esc(ago(Math.round((Date.now() - new Date(c.last_order + "T00:00:00")) / 864e5))) + ")." : " They've never ordered.") +
+        "</div></div>";
+      return;
+    }
+
+    // KPIs
+    var pace = t.pace == null ? "" : (t.pace >= 1
+      ? '<b class="up">' + Math.round((t.pace - 1) * 100) + "% ahead</b> of"
+      : '<b class="down">' + Math.round((1 - t.pace) * 100) + "% behind</b>") + " the same days last year (" + eur(t.last_same) + ")";
+    var lastSub = o.since_last == null ? "No orders since " + (y - 1) :
+      ago(o.since_last) + (o.usual_gap ? " · usually " + every(o.usual_gap) : "");
+    if (o.overdue) lastSub = '<b class="warn">Overdue</b> · ' + lastSub;
+    var k = document.createElement("div");
+    k.className = "kpis";
+    k.innerHTML =
+      kpi(y + " so far" + where, eur(t.now), pace) +
+      kpi("All of " + (y - 1), eur(t.last_full), o.count_last + " orders") +
+      kpi("Orders in " + y, o.count_now, o.avg_value ? "Average order " + eur(o.avg_value) : "") +
+      kpi("Last order", day(o.last), lastSub, o.overdue);
+    pane.appendChild(k);
+
+    // Month by month
+    var max = Math.max.apply(null, d.months.last.concat(d.months.now).concat([1]));
+    var names = Array.from({ length: 12 }, function (_, i) { return new Date(2000, i, 1).toLocaleDateString(undefined, { month: "short" }); });
+    var chart = document.createElement("div");
+    chart.innerHTML = '<div class="section-title">Purchases by month <span class="legend"><span><i style="background:var(--last-year)"></i>' + (y - 1) +
+      '</span><span><i style="background:var(--navy)"></i>' + y + "</span></span></div>" +
+      '<div class="card chart"><div class="bars">' + names.map(function (n, i) {
+        var a = d.months.last[i], b = d.months.now[i];
+        return '<div class="month" title="' + esc(n) + ": " + (y - 1) + " " + eur(a) + " · " + y + " " + eur(b) + '">' +
+          '<div class="b last" style="height:' + (a / max * 100) + '%"></div><div class="b now" style="height:' + (b / max * 100) + '%"></div></div>';
+      }).join("") + '</div><div class="months">' + names.map(function (n) { return "<span>" + esc(n) + "</span>"; }).join("") + "</div></div>";
+    pane.appendChild(chart);
+
+    // To bring up on the call
+    var by = { due: [], stopped: [], ok: [], new: [], once: [] };
+    d.products.forEach(function (p) { (by[p.status] || by.ok).push(p); });
+    // Their biggest products first: those are the ones worth the call.
+    function spend(a, b) { return (b.spent_last + b.spent_now) - (a.spent_last + a.spent_now); }
+    by.due.sort(spend);
+    by.stopped.sort(spend);
+
+    var talk = document.createElement("div");
+    talk.innerHTML = '<div class="section-title">To bring up</div>';
+    var grid = document.createElement("div");
+    grid.className = "talk";
+    talk.appendChild(grid);
+    pane.appendChild(talk);
+
+    function box(cls, title, hint, list, line, filterTo) {
+      var b = document.createElement("div");
+      b.className = "card box";
+      b.innerHTML = '<h3><span class="dot ' + cls + '"></span>' + title + '<span class="n">' + list.length + '</span></h3><p class="hint">' + hint + "</p>";
+      if (!list.length) b.insertAdjacentHTML("beforeend", '<div class="none">Nothing here.</div>');
+      list.slice(0, 5).forEach(function (p) {
+        var it = document.createElement("div");
+        it.className = "item";
+        it.appendChild(UI.thumb(p));
+        it.insertAdjacentHTML("beforeend", '<div class="grow"><div class="t" title="' + esc(p.name) + '">' + esc(UI.pretty(p.name)) + '</div><div class="s">' + line(p) + "</div></div>" +
+          (p.free > 0 ? '<span class="badge ok">In stock</span>' : '<span class="badge out">Out</span>'));
+        b.appendChild(it);
+      });
+      if (filterTo && list.length > 5) {
+        var all = document.createElement("button");
+        all.type = "button";
+        all.className = "linkish all";
+        all.textContent = "See all " + list.length + " →";
+        all.addEventListener("click", function () { setFilter(filterTo); table.scrollIntoView({ behavior: "smooth" }); });
+        b.appendChild(all);
+      }
+      grid.appendChild(b);
+    }
+    box("due", "Due to reorder", "Ordered regularly, and it's been longer than usual.", by.due, function (p) {
+      return "Last " + esc(day(p.last)) + " · usually " + esc(every(p.every));
+    }, "due");
+    box("stopped", "Stopped buying", "Bought regularly before, nothing for months.", by.stopped, function (p) {
+      return "Last " + esc(day(p.last)) + " · " + p.orders + " orders before";
+    }, "stopped");
+    box("idea", "Similar shops also buy", d.similar_count ? "Bought by shops with a basket like theirs, never by them." : "Not enough order history to compare.",
+      d.ideas, function (p) {
+        return "Bought by " + p.similar_buyers + " of " + d.similar_count + " similar shops" + (p.sku ? " · SKU " + esc(p.sku) : "");
+      });
+
+    // Everything they buy
+    var table = document.createElement("div");
+    var counts = { all: d.products.length - by.once.length, due: by.due.length, stopped: by.stopped.length, new: by.new.length, once: by.once.length };
+    table.innerHTML = '<div class="section-title">What they buy <span class="hint">since 1 Jan ' + (y - 1) + ", in the unit they order in</span></div>" +
+      '<div class="filters"><div class="search"><input class="txt" placeholder="Search by SKU or product name…" autocomplete="off"></div><div class="seg">' +
+      '<button data-f="all" class="on">All <small>' + counts.all + "</small></button>" +
+      '<button data-f="due">Due <small>' + counts.due + "</small></button>" +
+      '<button data-f="stopped">Stopped <small>' + counts.stopped + "</small></button>" +
+      '<button data-f="new">New in ' + y + " <small>" + counts.new + "</small></button>" +
+      '<button data-f="once">Tried once <small>' + counts.once + "</small></button></div></div>" +
+      '<div class="card rows"><div class="grid cols"><span></span><span>Product</span><span class="r hide-md">Orders</span>' +
+      '<span class="r hide-md">How often</span><span class="r hide-sm">Last order</span><span class="r hide-md">' + (y - 1) + '</span><span class="r">' + y +
+      '</span><span class="r hide-sm">Status</span></div><div class="list"></div></div>';
+    pane.appendChild(table);
+    var search = table.querySelector("input");
+    var listEl = table.querySelector(".list");
+    var filter = "all";
+    var LABEL = { due: "Due", stopped: "Stopped", new: "New", once: "Tried once", ok: "Regular" };
+
+    function setFilter(f) {
+      filter = f;
+      table.querySelectorAll(".seg button").forEach(function (x) { x.classList.toggle("on", x.dataset.f === f); });
+      draw();
+    }
+    table.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { setFilter(b.dataset.f); }); });
+    search.addEventListener("input", draw);
+
+    function draw() {
+      var q = search.value.trim().toLowerCase();
+      var shown = d.products.filter(function (p) {
+        if (q && p.name.toLowerCase().indexOf(q) === -1 && UI.pretty(p.name).toLowerCase().indexOf(q) === -1) return false;
+        return filter === "all" ? p.status !== "once" : p.status === filter;
+      });
+      listEl.innerHTML = "";
+      if (!shown.length) { listEl.innerHTML = '<div class="empty">No products here.</div>'; return; }
+      var drawn = 0;
+      function batch() {
+        shown.slice(drawn, drawn + 80).forEach(function (p) {
+          var r = document.createElement("div");
+          r.className = "grid row";
+          r.appendChild(UI.thumb(p));
+          r.insertAdjacentHTML("beforeend",
+            '<div><div class="t" title="' + esc(p.name) + '">' + esc(UI.pretty(p.name)) + '</div><div class="s">' + (p.sku ? "SKU " + esc(p.sku) + " · " : "") +
+              (p.free > 0 ? '<span class="up">In stock</span>' : '<span class="down">Out of stock</span>') + "</div></div>" +
+            '<div class="r hide-md">' + p.orders + "</div>" +
+            '<div class="r hide-md">' + esc(every(p.every)) + "</div>" +
+            '<div class="r hide-sm">' + esc(day(p.last)) + "<small>" + esc(ago(p.idle)) + "</small></div>" +
+            '<div class="r hide-md">' + num(p.qty_last) + "<small>" + esc(p.uom) + "</small></div>" +
+            '<div class="r">' + num(p.qty_now) + "<small>" + (p.qty_last_same ? "same time " + (y - 1) + ": " + num(p.qty_last_same) : esc(p.uom)) + "</small></div>" +
+            '<div class="r hide-sm"><span class="badge ' + (p.status === "ok" ? "regular" : p.status) + '">' + LABEL[p.status] + "</span></div>");
+          listEl.appendChild(r);
+        });
+        drawn = Math.min(drawn + 80, shown.length);
+        var old = listEl.querySelector(".more");
+        if (old) old.remove();
+        if (drawn < shown.length) {
+          var more = document.createElement("div");
+          more.className = "more";
+          more.innerHTML = '<button type="button" class="btn">Show ' + Math.min(80, shown.length - drawn) + " more of " + (shown.length - drawn) + "</button>";
+          more.querySelector("button").addEventListener("click", batch);
+          listEl.appendChild(more);
+        }
+      }
+      batch();
+    }
+    draw();
+
+    // Open orders
+    var orders = document.createElement("div");
+    orders.className = "orders";
+    orders.innerHTML = '<div class="section-title">Confirmed, not delivered yet <span class="hint">orders from the last 90 days; no need to offer these again</span></div>' +
+      (d.open_lines.length
+        ? '<div class="card rows"><div class="grid cols"><span>Order</span><span class="hide-sm">Date</span><span>Product</span><span class="r hide-sm">Ordered</span><span class="r">To deliver</span><span class="r hide-sm">Amount</span></div>' +
+          d.open_lines.map(function (l) {
+            return '<div class="grid row"><span>' + esc(l.order) + '</span><span class="hide-sm">' + esc(day(l.date)) + '</span><span class="t" title="' + esc(l.name) + '">' + esc(UI.pretty(l.name)) +
+              '</span><span class="r hide-sm">' + num(l.ordered) + '</span><span class="r">' + num(l.to_deliver) + '</span><span class="r hide-sm">' + eur(l.amount) + "</span></div>";
+          }).join("") + "</div>"
+        : '<div class="card"><div class="empty">Everything they ordered has been delivered.</div></div>');
+    pane.appendChild(orders);
+
+    pane.insertAdjacentHTML("beforeend", '<div class="foot">Counts confirmed sales orders in Odoo since 1 January ' + (y - 1) +
+      (d.location ? " delivered to " + esc(d.location) : ", including orders placed on their delivery addresses") + ". Euro totals exclude VAT. <b>Due</b> means ordered at least twice and it's been 30% longer than their usual gap; " +
+      "<b>Stopped</b> means nothing for over 4 months and three usual gaps.</div>");
+  }
+
+  // #<customer id> opens that customer (a bookmark, or a link from Stock check).
+  function fromHash() {
+    var id = parseInt(location.hash.slice(1), 10);
+    if (!id || id === openId) return;
+    open(recent().filter(function (c) { return c.id === id; })[0] || { id: id });
+  }
+  window.addEventListener("hashchange", fromHash);
+  renderList();
+  fromHash();
+})();
+</script>
+<script src="assets/how-it-works.js"></script>
+<script>
+  SalesHelp.setup({
+    key: "customer",
+    title: "Customer profile",
+    steps: [
+      ["Find the customer", "type at least 2 letters of their name on the left. The ones you opened lately (here or in Stock check) sit under <b>Recent</b>."],
+      ["Read the top", "how they're doing this year against the same days last year, how often they order, and whether they're <b>overdue</b>. A customer with several shops has a <b>Delivered to</b> switch."],
+      ["Bring it up", "<b>Due to reorder</b> are their regulars that are late, <b>Stopped buying</b> are products they've dropped, and <b>Similar shops also buy</b> are ideas they've never ordered."],
+      ["Look it all up", "the full list of what they buy, with how often and how much, this year and last. <b>Check stock →</b> and <b>Recommendations →</b> open those tools for them."]
+    ],
+    tips: [
+      "Orders placed on a customer's delivery addresses count too.",
+      "The first customer takes about 15 seconds while it reads everyone's orders for the comparisons; after that it's quicker."
+    ]
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Stock check · Sales Tools</title>
+<script src="assets/demo-api.js"></script>
+<link rel="stylesheet" href="assets/sales.css">
+<style>
+  /* One row per product: photo, name, free to use, on hand, incoming, last bought. */
+  .list { padding: 14px 24px 0; }
+  .grid { display: grid; align-items: center; gap: 14px; grid-template-columns: 60px minmax(220px, 1fr) 118px 104px 180px 112px; }
+  .cols { padding: 0 14px 7px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; }
+  .r { text-align: right; }
+  .row {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 8px 14px 8px 8px; margin-bottom: 7px; transition: border-color .12s, box-shadow .12s;
+  }
+  .row:hover { border-color: var(--line-strong); box-shadow: 0 3px 10px rgba(0,0,0,.06); }
+  .row .thumb { width: 60px; height: 60px; }
+  .name { min-width: 0; }
+  .name .t { font-size: 13.5px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .name .s { font-size: 11.5px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .name .s b { color: var(--ink); font-weight: 600; }
+  .qty { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .qty .badge { font-size: 13px; padding: 3px 9px; }
+  .u { display: block; font-size: 10.5px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eta .q { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .eta .q .u { display: inline; font-weight: 500; }
+  .eta .d { font-size: 11.5px; color: var(--navy); font-weight: 600; margin-top: 2px; }
+  .eta .d.late { color: var(--warn); }
+  .eta .d .ref { color: var(--muted); font-weight: 500; }
+  .none { color: var(--faint); }
+  .last { font-size: 12px; color: var(--muted); text-align: right; }
+  .last small { display: block; font-size: 10.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .more { padding: 10px 0 24px; text-align: center; color: var(--muted); font-size: 12.5px; min-height: 1px; }
+  .page-head .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+
+  @media (max-width: 1050px) {
+    .grid { grid-template-columns: 52px minmax(0, 1fr) 100px 160px; }
+    .row .thumb { width: 52px; height: 52px; }
+    .hide-md { display: none; }
+  }
+  @media (max-width: 760px) {
+    .list { padding-left: 16px; padding-right: 16px; }
+    .grid { grid-template-columns: 48px minmax(0, 1fr) 96px; gap: 10px; }
+    .row .thumb { width: 48px; height: 48px; }
+    .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="tool">
+  <aside class="side">
+    <div class="side-head"><h3>Price lists &amp; customers</h3><span class="n" id="pl-count"></span></div>
+    <div class="search"><input type="text" class="txt" id="find" placeholder="Search price lists or customers…" autocomplete="off"></div>
+    <div class="side-list" id="side-list"><div class="side-note">Loading price lists…</div></div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="empty-state" id="intro">
+      <div class="ic"><svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6z"/><path d="M3 6l7 3.5L17 6M10 9.5v8"/></svg></div>
+      <h2>Pick a price list or a customer</h2>
+      <p>Every product on it with live stock from Odoo: free to use, on hand, what's incoming and when, and when the client last bought it.</p>
+    </div>
+    <div id="out"></div>
+  </main>
+</div>
+
+<script src="assets/sales.js"></script>
+<script>
+(function () {
+  const UI = window.SalesUI;
+  const esc = UI.esc;
+  const $ = id => document.getElementById(id);
+  const find = $("find"), sideList = $("side-list"), out = $("out");
+
+  // ---- formatting ----
+  const fmt = n => typeof n === "number" ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : n;
+  const fmtMoney = n => typeof n === "number" ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €" : n;
+  const parseDay = iso => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); };
+  const fmtDay = iso => parseDay(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  function daysFromToday(iso) {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    return Math.round((parseDay(iso) - t) / 86400000);
+  }
+  function etaLabel(iso) {
+    const n = daysFromToday(iso);
+    if (n < 0) return { text: "Was due " + fmtDay(iso), late: true };
+    if (n === 0) return { text: "Due today", late: false };
+    if (n === 1) return { text: "Due tomorrow", late: false };
+    return { text: "Due " + fmtDay(iso) + (n <= 30 ? " · in " + n + " days" : ""), late: false };
+  }
+  // Stock is counted in base units; show it in the case/display the product
+  // is sold in (r.pack), falling back to base units when Odoo has no pack.
+  const inPacks = (r, q) => r.pack ? q / r.pack.per : q;
+  const fmtPacks = n => n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  // Odoo names a case unit "CS/12" (a case of 12): read the 12 from it.
+  const caseOf = uom => { const m = /^CS\s*\/\s*(\d+)/i.exec(uom || ""); return m ? +m[1] : null; };
+  function unitName(label, n) {
+    const per = caseOf(label);
+    if (per) return n === 1 ? "case of " + per : "cases of " + per;
+    const l = String(label || "units").toLowerCase();
+    return n === 1 ? l.replace(/s$/, "") : l;
+  }
+  const packLabel = r => r.pack ? r.pack.label : unitName(r.base_uom, 2);
+  // The hover note: the same quantity in single units, when we can tell.
+  function qtyTip(r, q) {
+    const shown = inPacks(r, q);
+    let units = null, per = null;
+    if (r.pack) { units = q; per = r.pack.per; }
+    else if (caseOf(r.base_uom)) { per = caseOf(r.base_uom); units = q * per; }
+    const head = fmtPacks(shown) + " " + (r.pack ? r.pack.label : unitName(r.base_uom, shown));
+    if (units == null) return head + "\nOdoo doesn't say how many units are in one.";
+    return head + " × " + fmt(per) + " = " + fmt(units) + " units";
+  }
+  function fetchedLabel(data) {
+    if (!data.fetched_at) return fmtDay(data.generated_at);
+    const at = new Date(data.fetched_at);
+    const mins = Math.round((Date.now() - at) / 60000);
+    return mins >= 1 ? "updated " + mins + " min ago" : "updated " + at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // ---- the list on the left: price lists, customers, recent ----
+  const RECENT_KEY = "st-stock-recent";
+  const RECENT_CLIENTS_KEY = "st-stock-recent-customers";   // shared with Customer profile
+  const PL_CACHE_KEY = "st-stock-pricelists";
+  const RECENT_MAX = 5;
+  const read = k => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch (e) { return []; } };
+  const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  const rememberList = id => write(RECENT_KEY, [id].concat(read(RECENT_KEY).filter(x => x !== id)).slice(0, RECENT_MAX));
+  const rememberClient = c => write(RECENT_CLIENTS_KEY, [c].concat(read(RECENT_CLIENTS_KEY).filter(x => x.id !== c.id)).slice(0, RECENT_MAX));
+
+  let pricelists = [];
+  let current = { pricelist: null, client: null };
+  let busy = false;
+  let hits = [], hitQuery = "", timer = null;
+
+  const ICON_LIST = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 5.5h9M7 10h9M7 14.5h9M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01"/></svg>';
+  const ICON_PERSON = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 9.5a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M3.5 17.5c.6-3.3 3.3-5.3 6.5-5.3s5.9 2 6.5 5.3"/></svg>';
+
+  function group(text) {
+    const g = document.createElement("div");
+    g.className = "group";
+    g.textContent = text;
+    return g;
+  }
+  function row(icon, name, sub, on, dim, onClick, title) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "item-row" + (on ? " on" : "") + (dim ? " dim" : "");
+    if (title) b.title = title;
+    b.innerHTML = '<span class="kind">' + icon + '</span><span class="grow"><span class="nm">' + esc(name) + "</span><small>" + esc(sub) + "</small></span>";
+    b.addEventListener("click", onClick);
+    return b;
+  }
+  function pricelistRow(p) {
+    return row(ICON_LIST, p.name, p.tag, current.pricelist === p.id && !current.client, false, () => open(p.id, null));
+  }
+  function customerRow(c) {
+    const sub = [c.place, c.pricelist ? c.pricelist.name : "No price list"].filter(Boolean).join(" · ");
+    return row(ICON_PERSON, c.name, sub, current.client === c.id, !c.pricelist, () => {
+      if (!c.pricelist) {
+        showNotice(c.name + " has no price list set in Odoo, so there's nothing to check. Pick their price list instead.", true);
+        return;
+      }
+      rememberClient(c);
+      open(c.pricelist.id, c.id);
+    }, c.pricelist ? "Their price list, with what they last bought" : "No price list in Odoo");
+  }
+
+  function renderSide() {
+    const q = find.value.trim().toLowerCase();
+    sideList.innerHTML = "";
+    if (q) {
+      const clients = customerHitsFor(q);
+      if (clients.length) {
+        sideList.appendChild(group("Customers"));
+        clients.forEach(c => sideList.appendChild(customerRow(c)));
+      }
+      const shown = pricelists.filter(p => p.name.toLowerCase().includes(q));
+      if (shown.length) {
+        sideList.appendChild(group("Price lists"));
+        shown.forEach(p => sideList.appendChild(pricelistRow(p)));
+      }
+      if (!clients.length && !shown.length) {
+        sideList.insertAdjacentHTML("beforeend", '<div class="side-note">' +
+          (q.length >= 2 && hitQuery.toLowerCase() !== q ? "Searching customers…" : "Nothing matches “" + esc(find.value.trim()) + "”.") + "</div>");
+      }
+      return;
+    }
+    const byId = new Map(pricelists.map(p => [p.id, p]));
+    const recentLists = read(RECENT_KEY).map(id => byId.get(id)).filter(Boolean);
+    const recentClients = read(RECENT_CLIENTS_KEY);
+    if (recentLists.length || recentClients.length) {
+      sideList.appendChild(group("Recent"));
+      recentClients.forEach(c => sideList.appendChild(customerRow(c)));
+      recentLists.forEach(p => sideList.appendChild(pricelistRow(p)));
+    }
+    if (pricelists.length) {
+      sideList.appendChild(group("All price lists"));
+      pricelists.forEach(p => sideList.appendChild(pricelistRow(p)));
+    }
+  }
+  function customerHitsFor(q) { return hitQuery.toLowerCase() === q ? hits : []; }
+
+  find.addEventListener("input", () => {
+    const q = find.value.trim();
+    clearTimeout(timer);
+    renderSide();
+    if (q.length < 2) return;
+    timer = setTimeout(async () => {
+      try {
+        const d = await (await fetch("/api/customers?q=" + encodeURIComponent(q))).json();
+        if (d.error || find.value.trim() !== q) return;
+        hits = d.results || [];
+        hitQuery = q;
+        renderSide();
+      } catch (e) { /* price lists still work without it */ }
+    }, 250);
+  });
+
+  // Last time's list shows at once; Odoo's fresh one replaces it.
+  (async function loadPricelists() {
+    const cached = read(PL_CACHE_KEY);
+    if (cached.length) { pricelists = cached; $("pl-count").textContent = fmt(pricelists.length); renderSide(); }
+    try {
+      const d = await (await fetch("/api/pricelists")).json();
+      if (d.error) throw new Error(d.error);
+      pricelists = d.results || [];
+      write(PL_CACHE_KEY, pricelists);
+      $("pl-count").textContent = fmt(pricelists.length);
+      if (!busy) renderSide();
+    } catch (e) {
+      if (pricelists.length) return;
+      sideList.innerHTML = '<div class="side-note err">Couldn\'t load the price lists from Odoo: ' + esc(e.message) + "</div>";
+    }
+  })();
+
+  // ---- one stock check ----
+  let currentData = null;
+
+  function showNotice(msg, isError) {
+    const n = document.createElement("div");
+    n.className = "notice" + (isError ? " err" : "");
+    n.textContent = msg;
+    const old = out.querySelector(":scope > .notice");
+    if (old) old.remove();
+    out.prepend(n);
+    $("intro").hidden = true;
+  }
+
+  async function open(pricelistId, clientId, fresh) {
+    if (busy) return;
+    busy = true;
+    current = { pricelist: pricelistId, client: clientId };
+    if (!clientId) rememberList(pricelistId);
+    try { history.replaceState(null, "", "#pl=" + pricelistId + (clientId ? "&client=" + clientId : "")); } catch (e) {}
+    renderSide();
+    sideList.classList.add("busy");
+    $("intro").hidden = true;
+    UI.loading(out, "Getting live stock from Odoo… big price lists take up to 20 seconds.");
+    try {
+      let data;
+      try {
+        const res = await fetch("/api/report/pricelist-stock?id=" + pricelistId + (clientId ? "&client=" + clientId : "") + (fresh ? "&fresh=1" : ""));
+        data = await res.json();
+      } catch (netErr) {
+        out.innerHTML = "";
+        showNotice("Couldn't reach the server. If you're on your Mac, is the app still running in Terminal?", true);
+        return;
+      }
+      if (data.error) { out.innerHTML = ""; showNotice(data.error, true); return; }
+      currentData = data;
+      out.innerHTML = "";
+      if (!data.products.length) {
+        showNotice("No specific products found on “" + data.pricelist.name + "”" +
+          (data.other_rules ? " (its " + data.other_rules + " rule(s) apply to whole categories, so there's nothing to list)" : "") + ".", true);
+        return;
+      }
+      out.appendChild(view(data));
+    } finally {
+      busy = false;
+      sideList.classList.remove("busy");
+      renderSide();
+    }
+  }
+
+  // The file is built from the stock check already on screen, so Odoo isn't asked twice.
+  async function exportExcel(btn) {
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Exporting…";
+    try {
+      const res = await fetch("/api/export/pricelist-stock?id=" + currentData.pricelist.id, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(currentData),
+      });
+      if (!res.ok) {
+        let msg = "Couldn't create the Excel file.";
+        try { msg = (await res.json()).error || msg; } catch (e) {}
+        showNotice(msg, true);
+        return;
+      }
+      const blob = await res.blob();
+      const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") || "");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = m ? decodeURIComponent(m[1]) : "stock_check.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    } catch (e) {
+      showNotice("Couldn't create the Excel file. Is the app still running?", true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
+  function view(data) {
+    const rows = data.products;
+    const wrap = document.createElement("div");
+    const clients = data.clients || [];
+    const client = data.client;   // opened for one customer
+    const multiClient = !client && clients.length > 1;
+    const arriving = rows.filter(r => r.next_eta).length;
+    const neverBought = client ? rows.filter(r => !r.last_sold).length : 0;
+
+    const meta = [];
+    if (client) meta.push("Price list <b>" + esc(data.pricelist.name) + "</b>");
+    else if (clients.length) meta.push("Client" + (multiClient ? "s" : "") + " <b>" + esc(clients.slice(0, 3).join(", ")) + "</b>" + (clients.length > 3 ? " +" + (clients.length - 3) : ""));
+    if (client && client.last_order_pricelist) {
+      meta.push('<button type="button" class="linkish" data-other title="Their card says ' + esc(data.pricelist.name) + ', which Odoo uses for new orders">Last order (' +
+        esc(fmtDay(client.last_order_pricelist.date)) + ") was on " + esc(client.last_order_pricelist.name) + ": open that</button>");
+    }
+    meta.push('Test data · ' + esc(fetchedLabel(data)) + ' · <button type="button" class="linkish" data-refresh>Refresh</button>');
+
+    const head = document.createElement("div");
+    head.className = "page-head";
+    head.innerHTML =
+      '<div class="top"><div><h1>' + esc(client ? client.name : data.pricelist.name) + '</h1><div class="meta">' +
+        meta.map(m => "<span>" + m + "</span>").join("") + "</div></div>" +
+        '<div class="actions">' + (client ? '<button type="button" class="btn" data-profile>Customer profile →</button>' : "") +
+        '<button type="button" class="btn primary" data-export>Export to Excel</button></div></div>' +
+      '<div class="pills"><span class="pill">' + fmt(data.product_count) + ' products</span>' +
+        '<span class="pill bad">' + fmt(data.out_of_stock_count) + ' out of stock</span>' +
+        '<span class="pill">' + fmt(arriving) + ' with stock incoming</span>' +
+        (data.other_rules ? '<span class="pill muted" title="Category-wide or global rules don\'t name specific products">' + fmt(data.other_rules) + " other rules</span>" : "") + "</div>";
+    wrap.appendChild(head);
+    head.querySelector("[data-refresh]").addEventListener("click", () => open(data.pricelist.id, client ? client.id : null, true));
+    head.querySelector("[data-export]").addEventListener("click", e => exportExcel(e.currentTarget));
+    const other = head.querySelector("[data-other]");
+    if (other) other.addEventListener("click", () => open(client.last_order_pricelist.id, client.id));
+    const prof = head.querySelector("[data-profile]");
+    if (prof) prof.addEventListener("click", () => UI.go("customer", String(client.id)));
+
+    const bar = document.createElement("div");
+    bar.className = "toolbar";
+    bar.innerHTML =
+      '<div class="search"><input type="text" class="txt" placeholder="Search by SKU or product name…" autocomplete="off"></div>' +
+      '<div class="seg"><button data-f="all" class="on">All</button><button data-f="in">In stock</button>' +
+      '<button data-f="out">Out of stock</button><button data-f="incoming">Incoming</button>' +
+      (client ? '<button data-f="never" title="On their price list, but ' + esc(client.name) + ' hasn\'t bought it in the last 3 years">Not bought yet <small>' + fmt(neverBought) + "</small></button>" : "") +
+      "</div>" +
+      '<select class="txt" title="Sort"><option value="most">Most free to use</option><option value="free">Least free to use</option>' +
+      '<option value="eta">Next arrival</option><option value="name">Name A–Z</option><option value="sku">SKU</option></select>';
+    wrap.appendChild(bar);
+
+    const list = document.createElement("div");
+    list.className = "list";
+    wrap.appendChild(list);
+
+    const search = bar.querySelector("input"), sortSel = bar.querySelector("select");
+    let filter = "all";
+    bar.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+      filter = b.dataset.f;
+      bar.querySelectorAll(".seg button").forEach(x => x.classList.toggle("on", x === b));
+      draw();
+    }));
+    search.addEventListener("input", draw);
+    sortSel.addEventListener("change", draw);
+
+    const sorters = {
+      free: (a, b) => inPacks(a, a.free_qty) - inPacks(b, b.free_qty),
+      most: (a, b) => inPacks(b, b.free_qty) - inPacks(a, a.free_qty),
+      eta: (a, b) => (a.next_eta || "9999").localeCompare(b.next_eta || "9999") || inPacks(a, a.free_qty) - inPacks(b, b.free_qty),
+      name: (a, b) => UI.pretty(a.name).localeCompare(UI.pretty(b.name)),
+      sku: (a, b) => (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true }),
+    };
+
+    function rowEl(r) {
+      const el = document.createElement("div");
+      el.className = "row grid";
+      el.appendChild(UI.thumb(r));
+      const unit = esc(packLabel(r));
+      const price = r.price == null ? "" : " · " + esc(fmtMoney(r.price));
+      let eta = '<span class="none">—</span>';
+      if (r.next_eta) {
+        const lbl = etaLabel(r.next_eta);
+        const first = r.arrivals[0];
+        const more = r.arrivals.length > 1 ? " · +" + (r.arrivals.length - 1) + " more" : "";
+        const tip = r.arrivals.map(a => fmtDay(a.date) + ": " + fmtPacks(inPacks(r, a.qty)) + " " + packLabel(r) + (a.ref ? " (" + a.ref + ")" : "")).join("\n");
+        eta = '<div class="q tip-left" data-tip="' + esc(qtyTip(r, r.incoming)) + '">' + esc(fmtPacks(inPacks(r, r.incoming))) + ' <span class="u">' + unit + "</span></div>" +
+              '<div class="d' + (lbl.late ? " late" : "") + '" title="' + esc(tip) + '">' + esc(lbl.text) +
+              (first.ref ? ' <span class="ref">' + esc(first.ref) + "</span>" : "") + esc(more) + "</div>";
+      } else if (r.incoming > 0) {
+        eta = '<div class="q tip-left" data-tip="' + esc(qtyTip(r, r.incoming)) + '">' + esc(fmtPacks(inPacks(r, r.incoming))) + ' <span class="u">' + unit + '</span></div><div class="d late">No date set</div>';
+      }
+      const lastTip = r.last_sold ? "Last bought by " + (r.last_sold_by || "the client")
+        : client ? client.name + " hasn't bought this in the last 3 years" : "Not bought by this price list's client(s) in the last 3 years";
+      el.insertAdjacentHTML("beforeend",
+        '<div class="name"><div class="t" title="' + esc(r.name) + '">' + esc(UI.pretty(r.name)) + "</div>" +
+          '<div class="s">' + (r.sku ? "SKU <b>" + esc(r.sku) + "</b>" : "No SKU") + price + "</div></div>" +
+        '<div class="r qty"><span data-tip="' + esc(qtyTip(r, r.free_qty)) + '"><span class="badge ' + (r.free_qty <= 0 ? "out" : "ok") + '">' +
+          esc(fmtPacks(inPacks(r, r.free_qty))) + '</span></span><span class="u">' + unit + "</span></div>" +
+        '<div class="r qty hide-md"><span data-tip="' + esc(qtyTip(r, r.on_hand)) + '">' + esc(fmtPacks(inPacks(r, r.on_hand))) + '</span><span class="u">' + unit + "</span></div>" +
+        '<div class="eta hide-sm">' + eta + "</div>" +
+        '<div class="last hide-md" title="' + esc(lastTip) + '">' + (r.last_sold ? esc(fmtDay(r.last_sold)) : '<span class="none">—</span>') +
+          (r.last_sold && multiClient ? "<small>" + esc(r.last_sold_by || "") + "</small>" : "") + "</div>");
+      return el;
+    }
+
+    const BATCH = 120;
+    let observer = null;
+    function draw() {
+      const q = search.value.trim().toLowerCase();
+      let shown = rows.filter(r =>
+        (!q || r.name.toLowerCase().includes(q) || UI.pretty(r.name).toLowerCase().includes(q) || (r.sku || "").toLowerCase().includes(q)) &&
+        (filter === "all" || (filter === "in" && r.free_qty > 0) || (filter === "out" && r.free_qty <= 0) ||
+         (filter === "incoming" && r.incoming > 0) || (filter === "never" && !r.last_sold)));
+      shown = shown.slice().sort(sorters[sortSel.value]);
+      list.innerHTML = "";
+      if (!shown.length) { list.innerHTML = '<div class="empty">No products match.</div>'; return; }
+      list.insertAdjacentHTML("beforeend",
+        '<div class="cols grid"><span></span><span>Product</span><span class="r">Free to use</span><span class="r hide-md">On hand</span>' +
+        '<span class="hide-sm">Incoming</span><span class="r hide-md">' + (client ? "They last bought" : "Client last bought") + "</span></div>");
+      // Big price lists have 1,000+ products: draw a screenful at a time.
+      let drawn = 0;
+      const more = document.createElement("div");
+      more.className = "more";
+      function batch() {
+        const frag = document.createDocumentFragment();
+        shown.slice(drawn, drawn + BATCH).forEach(r => frag.appendChild(rowEl(r)));
+        drawn = Math.min(drawn + BATCH, shown.length);
+        list.insertBefore(frag, more);
+        more.textContent = drawn < shown.length ? "Showing " + fmt(drawn) + " of " + fmt(shown.length) + "…" : "";
+        if (drawn >= shown.length && observer) observer.disconnect();
+      }
+      list.appendChild(more);
+      if (observer) observer.disconnect();
+      observer = new IntersectionObserver(entries => {
+        if (entries.some(e => e.isIntersecting) && drawn < shown.length) batch();
+      }, { rootMargin: "600px 0px" });
+      batch();
+      if (drawn < shown.length) observer.observe(more);
+    }
+    draw();
+    return wrap;
+  }
+
+  // #pl=<id>[&client=<id>] opens that stock check (a bookmark, or a link from
+  // Customer profile).
+  function fromHash() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    const pl = parseInt(h.get("pl"), 10), client = parseInt(h.get("client"), 10) || null;
+    if (pl && (pl !== current.pricelist || client !== current.client)) open(pl, client);
+  }
+  window.addEventListener("hashchange", fromHash);
+  fromHash();
+})();
+</script>
+<script src="assets/how-it-works.js"></script>
+<script>
+  SalesHelp.setup({
+    key: "stock",
+    title: "Checking stock",
+    steps: [
+      ["Pick a price list or a customer", "on the left. Type a price list or a customer's name in the box; a customer opens their own price list. The ones you opened lately sit under <b>Recent</b>."],
+      ["Read the stock", "every product on it, live from Odoo, in the case or display it's sold in: <b>Free to use</b> (not reserved for other orders), <b>On hand</b>, <b>Incoming</b> with its due date, and when <b>the client last bought</b> it. Hover a number to see it in single units."],
+      ["Narrow it down", "search by SKU or name, filter <b>In stock</b>, <b>Out of stock</b> or <b>Incoming</b>, and sort (most free stock comes first)."],
+      ["Export to Excel", "gives you the same list, with prices in €, to send on."]
+    ],
+    tips: [
+      "Opened for a customer, <b>They last bought</b> is that customer's own orders, and <b>Not bought yet</b> lists what's on their price list that they've never ordered: ideas to offer. <b>Customer profile →</b> opens their full brief.",
+      "Numbers are kept for 5 minutes. Click <b>Refresh</b> next to the time to get the very latest.",
+      "An orange <b>Was due …</b> means the delivery date has passed but the stock hasn't arrived yet."
+    ]
+  });
+</script>
+</body>
+</html>
